@@ -35,6 +35,16 @@ class IsSelfOrAdminForWrite(permissions.BasePermission):
         return request.user.is_superuser or not obj.is_superuser
 
 
+class IsProductOwnerOrAdmin(permissions.BasePermission):
+    """O'qish hammaga; mahsulotni faqat uni yaratgan foydalanuvchi yoki admin o'zgartira oladi."""
+    message = 'Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi.'
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return obj.created_by == request.user or get_role(request.user) == Profile.ADMIN
+
+
 class IsAdminRole(permissions.BasePermission):
     def has_permission(self, request, view):
         return get_role(request.user) == Profile.ADMIN

@@ -3,6 +3,7 @@ import io
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
+import tempfile
 from unittest import mock
 
 from django.conf import settings
@@ -11,6 +12,8 @@ from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
@@ -23,7 +26,7 @@ from restaurant.models import (
     Category, MenuItem, Order, OrderStatusEvent, Profile, Reservation, RestaurantSettings, Table,
 )
 from .exceptions import translate, translate_data
-from .models import Book
+from .models import Book, Product
 from .serializers import UserSerializer
 
 User = get_user_model()
@@ -1567,6 +1570,269 @@ class UzbekMessageTests(UserAPITestBase):
         self.login_as()
         response = self.client.get(f'/api/users/{self.bob.pk}/')
         self.assertEqual(response.data['detail'], 'Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan.')
+
+
+class ProductAPITests(APITestCase):
+    URL = '/api/products/'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user('owner', password='x')
+        cls.other = User.objects.create_user('other', password='x')
+        cls.admin = User.objects.create_user('boss', password='x')
+        Profile.objects.create(user=cls.admin, role=Profile.ADMIN)
+        cls.waiter = User.objects.create_user('ofitsiant', password='x')
+        Profile.objects.create(user=cls.waiter, role=Profile.WAITER)
+        cls.root = User.objects.create_superuser('root', password='x')
+        cls.product = Product.objects.create(
+            name='Non', description='Tandir noni', price=Decimal('5000'), quantity=20, created_by=cls.owner,
+        )
+        cls.detail_url = f'{cls.URL}{cls.product.pk}/'
+
+    def valid_payload(self, **overrides):
+        data = {'name': 'Choy', 'description': 'Ko‘k choy', 'price': '12000.50', 'quantity': 3}
+        data.update(overrides)
+        return data
+
+    def image_file(self, fmt='PNG', name='a.png', padding=0):
+        buffer = io.BytesIO()
+        Image.new('RGB', (2, 2)).save(buffer, format=fmt)
+        return SimpleUploadedFile(name, buffer.getvalue() + b'\0' * padding, f'image/{fmt.lower()}')
+
+    # --- Anonim ---
+
+    def test_anonymous_list_is_short(self):
+        response = self.client.get(self.URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        item = response.data['results'][0]
+        self.assertEqual(set(item), {'id', 'name', 'price', 'image'})
+        self.assertEqual(item['name'], 'Non')
+        self.assertEqual(item['price'], '5000.00')
+
+    def test_anonymous_cannot_read_detail_or_write(self):
+        self.assertEqual(self.client.get(self.detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.post(self.URL, self.valid_payload(), format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.patch(self.detail_url, {'name': 'X'}, format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.put(self.detail_url, self.valid_payload(), format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.delete(self.detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.options(self.detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(Product.objects.count(), 1)
+
+    # --- Login qilgan ---
+
+    def test_authenticated_detail_has_all_fields(self):
+        self.client.force_authenticate(user=self.other)
+        response = self.client.get(self.detail_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(set(response.data), {
+            'id', 'name', 'description', 'price', 'quantity', 'image', 'created_by', 'created_at', 'updated_at',
+        })
+        self.assertEqual(response.data['created_by'], 'owner')
+        self.assertEqual(response.data['quantity'], 20)
+        self.assertEqual(response.data['description'], 'Tandir noni')
+
+    def test_list_stays_short_when_logged_in(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(set(self.client.get(self.URL).data['results'][0]), {'id', 'name', 'price', 'image'})
+
+    def test_create_forces_created_by_and_read_only_fields(self):
+        self.client.force_authenticate(user=self.other)
+        response = self.client.post(self.URL, self.valid_payload(
+            created_by=self.owner.pk, id=999, created_at='2000-01-01T00:00:00Z',
+        ), format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['created_by'], 'other')
+        self.assertNotEqual(response.data['id'], 999)
+        product = Product.objects.get(pk=response.data['id'])
+        self.assertEqual(product.created_by, self.other)
+        self.assertEqual(product.price, Decimal('12000.50'))
+        self.assertGreater(product.created_at.year, 2000)
+
+    def test_any_role_can_create(self):
+        self.client.force_authenticate(user=self.waiter)
+        self.assertEqual(self.client.post(self.URL, self.valid_payload(), format='json').status_code, status.HTTP_201_CREATED)
+
+    # --- Boshqaning mahsuloti ---
+
+    def test_other_user_cannot_change(self):
+        self.client.force_authenticate(user=self.other)
+        for response in (
+            self.client.put(self.detail_url, self.valid_payload(), format='json'),
+            self.client.patch(self.detail_url, {'name': 'Buzildi'}, format='json'),
+            self.client.delete(self.detail_url),
+        ):
+            self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+            self.assertEqual(response.data['detail'], 'Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi.')
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.name, 'Non')
+
+    def test_non_admin_staff_role_cannot_change_others(self):
+        self.client.force_authenticate(user=self.waiter)
+        self.assertEqual(self.client.patch(self.detail_url, {'name': 'X'}, format='json').status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_missing_product_is_404(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(f'{self.URL}999999/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(response.data['detail'], 'Yozuv topilmadi.')
+
+    # --- Egasi ---
+
+    def test_owner_put(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.put(self.detail_url, self.valid_payload(name='Yangi non'), format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.name, 'Yangi non')
+        self.assertEqual(self.product.quantity, 3)
+
+    def test_put_requires_name_and_price(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.put(self.detail_url, {'description': 'faqat tavsif'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('name', response.data)
+        self.assertIn('price', response.data)
+
+    def test_owner_patch_changes_only_sent_field(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.patch(self.detail_url, {'quantity': 7}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.quantity, 7)
+        self.assertEqual(self.product.name, 'Non')
+
+    def test_ownership_cannot_be_transferred(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.patch(self.detail_url, {'created_by': self.other.pk}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.created_by, self.owner)
+
+    def test_owner_delete(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(self.client.delete(self.detail_url).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+
+    # --- Admin ---
+
+    def test_admin_role_and_superuser_can_change_others(self):
+        for user in (self.admin, self.root):
+            with self.subTest(user=user.username):
+                product = Product.objects.create(name='Tahrir', price=Decimal('1'), created_by=self.owner)
+                url = f'{self.URL}{product.pk}/'
+                self.client.force_authenticate(user=user)
+                response = self.client.patch(url, {'name': 'Admin tahriri'}, format='json')
+                self.assertEqual(response.status_code, status.HTTP_200_OK)
+                self.assertEqual(response.data['created_by'], 'owner')   # egasi o'zgarmaydi
+                self.assertEqual(self.client.delete(url).status_code, status.HTTP_204_NO_CONTENT)
+
+    # --- Validatsiya ---
+
+    def assert_invalid(self, field, **overrides):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.post(self.URL, self.valid_payload(**overrides), format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn(field, response.data)
+
+    def test_negative_price(self):
+        self.assert_invalid('price', price='-1')
+        response = self.client.post(self.URL, self.valid_payload(price='-1'), format='json')
+        self.assertEqual(response.data['price'], ['Qiymat 0 dan kichik bo‘lmasin.'])
+
+    def test_zero_price_allowed(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(self.client.post(self.URL, self.valid_payload(price='0'), format='json').status_code, status.HTTP_201_CREATED)
+
+    def test_blank_name(self):
+        self.assert_invalid('name', name='')
+        self.assert_invalid('name', name='   ')
+
+    def test_negative_quantity(self):
+        self.assert_invalid('quantity', quantity=-1)
+
+    def test_price_too_large(self):
+        self.assert_invalid('price', price='12345678901.00')
+
+    def post_image(self, image):
+        self.client.force_authenticate(user=self.owner)
+        return self.client.post(self.URL, {**self.valid_payload(), 'image': image}, format='multipart')
+
+    def test_wrong_image_format(self):
+        response = self.post_image(self.image_file('GIF', 'a.gif'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('image', response.data)
+
+    def test_fake_image_renamed_to_png(self):
+        response = self.post_image(SimpleUploadedFile('virus.png', b'bu rasm emas', 'image/png'))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('image', response.data)
+
+    def test_image_too_big(self):
+        response = self.post_image(self.image_file(padding=3 * 1024 * 1024))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('image', response.data)
+
+    def test_valid_image_upload(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            response = self.post_image(self.image_file())
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+            self.assertIn('/media/products/', response.data['image'])
+            listed = self.client.get(self.URL).data['results'][0]
+            self.assertEqual(listed['image'], response.data['image'])
+
+    # --- Qidiruv, saralash, filtr ---
+
+    def names(self, **params):
+        return [p['name'] for p in self.client.get(self.URL, params).data['results']]
+
+    def make_catalog(self):
+        Product.objects.create(name='Asal', description='Tog‘ asali', price=Decimal('90000'), created_by=self.other)
+        Product.objects.create(name='Zira', description='Ziravor', price=Decimal('100'), created_by=self.other)
+
+    def test_search(self):
+        self.make_catalog()
+        self.assertEqual(self.names(search='asal'), ['Asal'])
+        self.assertEqual(self.names(search='Tandir'), ['Non'])
+        self.assertEqual(self.names(search='yo‘q narsa'), [])
+
+    def test_ordering(self):
+        self.make_catalog()
+        self.assertEqual(self.names(ordering='price'), ['Zira', 'Non', 'Asal'])
+        self.assertEqual(self.names(ordering='-price'), ['Asal', 'Non', 'Zira'])
+        self.assertEqual(self.names(ordering='name'), ['Asal', 'Non', 'Zira'])
+
+    def test_default_order_is_newest_first(self):
+        self.make_catalog()
+        self.assertEqual(self.names(), ['Zira', 'Asal', 'Non'])
+
+    def test_filter_by_creator(self):
+        self.make_catalog()
+        self.assertEqual(self.names(created_by=self.owner.pk), ['Non'])
+
+    # --- Admin panel ---
+
+    def test_admin_add_sets_created_by(self):
+        self.client.force_login(self.root)
+        response = self.client.post(reverse('admin:api_product_add'), {
+            'name': 'Paneldan', 'description': '', 'price': '100', 'quantity': 1,
+        })
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.assertEqual(Product.objects.get(name='Paneldan').created_by, self.root)
+        self.assertEqual(self.client.get(reverse('admin:api_product_changelist')).status_code, status.HTTP_200_OK)
+
+    def test_admin_edit_keeps_created_by(self):
+        self.client.force_login(self.root)
+        response = self.client.post(reverse('admin:api_product_change', args=[self.product.pk]), {
+            'name': 'Tahrirlandi', 'description': '', 'price': '100', 'quantity': 1,
+        })
+        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.name, 'Tahrirlandi')
+        self.assertEqual(self.product.created_by, self.owner)
+
+    def test_creator_with_products_is_protected(self):
+        with self.assertRaises(ProtectedError):
+            self.owner.delete()
 
 
 class SeedTests(APITestCase):

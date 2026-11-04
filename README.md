@@ -2,7 +2,7 @@
 
 Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har bir buyruq, har bir kod qatori, o'rnatilgan paketlar, chiqqan xatolar va ularning qanday tuzatilgani tushuntirib yozilgan.
 
-**Hozirgi holat:** restoran API'si: menyu, stollar, bron, buyurtma, rollar va kunlik hisobot (17–24-bo'limlar). `Book` API o'quv namunasi sifatida qolgan.
+**Hozirgi holat:** restoran API'si: menyu, stollar, bron, buyurtma, rollar va kunlik hisobot (17–24-bo'limlar). Foydalanuvchi API va JWT (26-bo'lim), mahsulotlar (27-bo'lim). `Book` API o'quv namunasi sifatida qolgan.
 
 ---
 
@@ -34,6 +34,7 @@ Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har
 24. [Testlarni ishga tushirish](#24-testlarni-ishga-tushirish)
 25. [Tarix: klinikadan restoranga o'tish](#25-tarix-klinikadan-restoranga-otish)
 26. [Foydalanuvchi va JWT](#26-foydalanuvchi-va-jwt)
+27. [Mahsulotlar API](#27-mahsulotlar-api)
 
 ---
 
@@ -264,16 +265,16 @@ REST_FRAMEWORK = {
 }
 ```
 
-| Kalit                            | Vazifasi                                                                                                                                                                                                                                           |
-| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_AUTHENTICATION_CLASSES` | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). **ThrottledBasicAuthentication** login va parolni sarlavhadan oladi va xato urinishlarni cheklaydi (26.7-bo'lim). |
-| `DEFAULT_PERMISSION_CLASSES`     | Kimga nimaga ruxsat berilishi. **IsAuthenticatedOrReadOnly** bo'yicha o'qish (GET) hammaga ochiq, yozish (POST, PUT, DELETE) esa faqat login qilganlarga.                                                                                          |
-| `DEFAULT_FILTER_BACKENDS`        | **DjangoFilterBackend** maydon bo'yicha filtrlaydi (`?author=Ali`). **SearchFilter** matn bo'yicha qidiradi (`?search=python`). **OrderingFilter** saralaydi (`?ordering=-price`, minus kamayish tartibini bildiradi).                             |
-| `DEFAULT_PAGINATION_CLASS`       | Natijalarni sahifalarga bo'ladi (`?page=2`).                                                                                                                                                                                                       |
-| `PAGE_SIZE`                      | Bir sahifadagi yozuvlar soni: 10 ta.                                                                                                                                                                                                               |
-| `DEFAULT_THROTTLE_CLASSES`, `DEFAULT_THROTTLE_RATES`, `NUM_PROXIES` | So'rovlar sonini cheklash (26.7-bo'lim). |
-| `EXCEPTION_HANDLER`              | Xato javoblarini o'zbekchaga o'giradi (26.8-bo'lim). |
-| `DEFAULT_SCHEMA_CLASS`           | Swagger uchun API sxemasini drf-spectacular yaratishini bildiradi.                                                                                                                                                                                 |
+| Kalit                                                               | Vazifasi                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DEFAULT_AUTHENTICATION_CLASSES`                                    | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). **ThrottledBasicAuthentication** login va parolni sarlavhadan oladi va xato urinishlarni cheklaydi (26.7-bo'lim). |
+| `DEFAULT_PERMISSION_CLASSES`                                        | Kimga nimaga ruxsat berilishi. **IsAuthenticatedOrReadOnly** bo'yicha o'qish (GET) hammaga ochiq, yozish (POST, PUT, DELETE) esa faqat login qilganlarga.                                                                                                                                                                                                            |
+| `DEFAULT_FILTER_BACKENDS`                                           | **DjangoFilterBackend** maydon bo'yicha filtrlaydi (`?author=Ali`). **SearchFilter** matn bo'yicha qidiradi (`?search=python`). **OrderingFilter** saralaydi (`?ordering=-price`, minus kamayish tartibini bildiradi).                                                                                                                                               |
+| `DEFAULT_PAGINATION_CLASS`                                          | Natijalarni sahifalarga bo'ladi (`?page=2`).                                                                                                                                                                                                                                                                                                                         |
+| `PAGE_SIZE`                                                         | Bir sahifadagi yozuvlar soni: 10 ta.                                                                                                                                                                                                                                                                                                                                 |
+| `DEFAULT_THROTTLE_CLASSES`, `DEFAULT_THROTTLE_RATES`, `NUM_PROXIES` | So'rovlar sonini cheklash (26.7-bo'lim).                                                                                                                                                                                                                                                                                                                             |
+| `EXCEPTION_HANDLER`                                                 | Xato javoblarini o'zbekchaga o'giradi (26.8-bo'lim).                                                                                                                                                                                                                                                                                                                 |
+| `DEFAULT_SCHEMA_CLASS`                                              | Swagger uchun API sxemasini drf-spectacular yaratishini bildiradi.                                                                                                                                                                                                                                                                                                   |
 
 ### 6.4. CORS
 
@@ -730,7 +731,7 @@ Rest/
 │   ├── __init__.py
 │   ├── admin.py             # admin panel sozlamasi
 │   ├── apps.py              # app konfiguratsiyasi
-│   ├── models.py            # Book modeli
+│   ├── models.py            # Book va Product modellari
 │   ├── authentication.py    # xato urinishlari cheklangan Basic auth
 │   ├── exceptions.py        # o'zbekcha xato xabarlari
 │   ├── permissions.py       # rollar, ruxsat klasslari, IsOwnerOrAdmin
@@ -773,12 +774,12 @@ db.sqlite3
 media/
 ```
 
-| Qator                   | Nima uchun yuklanmaydi                                  |
-| ----------------------- | ------------------------------------------------------- |
-| `env/`                  | Katta hajmli, `requirements.txt` orqali qayta tiklanadi |
-| `__pycache__/`, `*.pyc` | Python avtomatik yaratadigan kesh fayllari              |
-| `db.sqlite3`            | Mahalliy baza                                           |
-| `.env`                  | Maxfiy kalitlar va parollar                             |
+| Qator                   | Nima uchun yuklanmaydi                                                                       |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `env/`                  | Katta hajmli, `requirements.txt` orqali qayta tiklanadi                                      |
+| `__pycache__/`, `*.pyc` | Python avtomatik yaratadigan kesh fayllari                                                   |
+| `db.sqlite3`            | Mahalliy baza                                                                                |
+| `.env`                  | Maxfiy kalitlar va parollar                                                                  |
 | `media/`                | Foydalanuvchilar yuklagan rasmlar (logotip, taom rasmi). Ular kod emas, ma'lumot hisoblanadi |
 
 ---
@@ -857,10 +858,10 @@ Maxfiy va muhitga bog'liq sozlamalar kod ichida emas, loyiha papkasidagi `.env` 
 
 ### 16.1. Fayllar
 
-| Fayl | Git'ga yuklanadimi | Vazifasi |
-| --- | --- | --- |
-| `.env` | **Yo'q** (`.gitignore` da bor) | Haqiqiy qiymatlar, masalan sizning `SECRET_KEY` ingiz |
-| `.env.example` | Ha | Namuna: qaysi o'zgaruvchilar kerakligini ko'rsatadi, haqiqiy kalit yo'q |
+| Fayl           | Git'ga yuklanadimi             | Vazifasi                                                                |
+| -------------- | ------------------------------ | ----------------------------------------------------------------------- |
+| `.env`         | **Yo'q** (`.gitignore` da bor) | Haqiqiy qiymatlar, masalan sizning `SECRET_KEY` ingiz                   |
+| `.env.example` | Ha                             | Namuna: qaysi o'zgaruvchilar kerakligini ko'rsatadi, haqiqiy kalit yo'q |
 
 `.env` tarkibi:
 
@@ -870,11 +871,11 @@ DEBUG=True
 ALLOWED_HOSTS=127.0.0.1,localhost
 ```
 
-| O'zgaruvchi | Nima uchun | Ishlab chiqishda | Serverda |
-| --- | --- | --- | --- |
-| `SECRET_KEY` | Sessiyalar, parolni tiklash havolalari, CSRF va imzolangan ma'lumotlar shu kalit bilan himoyalanadi. Kalitni bilgan odam sessiyani soxtalashtira oladi | Istalgan uzun qator | Yangi, tasodifiy, faqat shu serverga tegishli kalit |
-| `DEBUG` | `True` bo'lsa, xato sahifasida kod, sozlamalar va so'rov ma'lumotlari ko'rinadi. Media fayllarni ham Django o'zi beradi | `True` | **Albatta `False`** |
-| `ALLOWED_HOSTS` | Django javob beradigan domenlar. Boshqa `Host` sarlavhali so'rovlar 400 bilan rad etiladi (Host header hujumidan himoya) | `127.0.0.1,localhost` | `restoran.uz,www.restoran.uz` |
+| O'zgaruvchi     | Nima uchun                                                                                                                                             | Ishlab chiqishda      | Serverda                                            |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | --------------------------------------------------- |
+| `SECRET_KEY`    | Sessiyalar, parolni tiklash havolalari, CSRF va imzolangan ma'lumotlar shu kalit bilan himoyalanadi. Kalitni bilgan odam sessiyani soxtalashtira oladi | Istalgan uzun qator   | Yangi, tasodifiy, faqat shu serverga tegishli kalit |
+| `DEBUG`         | `True` bo'lsa, xato sahifasida kod, sozlamalar va so'rov ma'lumotlari ko'rinadi. Media fayllarni ham Django o'zi beradi                                | `True`                | **Albatta `False`**                                 |
+| `ALLOWED_HOSTS` | Django javob beradigan domenlar. Boshqa `Host` sarlavhali so'rovlar 400 bilan rad etiladi (Host header hujumidan himoya)                               | `127.0.0.1,localhost` | `restoran.uz,www.restoran.uz`                       |
 
 ### 16.2. `settings.py` dagi kod
 
@@ -894,13 +895,13 @@ DEBUG = os.getenv('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes', 'on'
 ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if h.strip()]
 ```
 
-| Qator | Izoh |
-| --- | --- |
-| `load_dotenv(BASE_DIR / '.env')` | `.env` dagi qatorlarni muhit o'zgaruvchilariga (`os.environ`) yuklaydi. Yo'l `BASE_DIR` bo'yicha beriladi, shuning uchun `manage.py` qaysi papkadan ishga tushirilishidan qat'i nazar fayl topiladi. Kompyuterda shu nomli o'zgaruvchi avvaldan bo'lsa, u ustun turadi |
-| `os.getenv('SECRET_KEY')` | O'zgaruvchini o'qiydi. Topilmasa, `None` qaytaradi |
-| `ImproperlyConfigured` | `.env` unutilsa, Django noaniq xato bilan emas, tushunarli xabar bilan to'xtaydi |
+| Qator                                       | Izoh                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `load_dotenv(BASE_DIR / '.env')`            | `.env` dagi qatorlarni muhit o'zgaruvchilariga (`os.environ`) yuklaydi. Yo'l `BASE_DIR` bo'yicha beriladi, shuning uchun `manage.py` qaysi papkadan ishga tushirilishidan qat'i nazar fayl topiladi. Kompyuterda shu nomli o'zgaruvchi avvaldan bo'lsa, u ustun turadi                                                  |
+| `os.getenv('SECRET_KEY')`                   | O'zgaruvchini o'qiydi. Topilmasa, `None` qaytaradi                                                                                                                                                                                                                                                                      |
+| `ImproperlyConfigured`                      | `.env` unutilsa, Django noaniq xato bilan emas, tushunarli xabar bilan to'xtaydi                                                                                                                                                                                                                                        |
 | `DEBUG = ... in ('1', 'true', 'yes', 'on')` | `.env` dagi hamma qiymat **matn**. `bool('False')` Python'da `True` bo'ladi (bo'sh bo'lmagan har qanday matn `True`), shuning uchun matn aniq qiymatlar bilan solishtiriladi. `.lower()` `True`/`true`/`TRUE` farqini yo'qotadi. O'zgaruvchi yozilmagan bo'lsa, `False` bo'ladi: xatolik bo'lsa, xavfsiz tomonga og'adi |
-| `ALLOWED_HOSTS = [...]` | `"127.0.0.1, localhost"` → `['127.0.0.1', 'localhost']`. `strip()` probellarni olib tashlaydi, `if h.strip()` esa bo'sh elementlarni (`"a,,b"` yoki bo'sh qator) tashlab ketadi |
+| `ALLOWED_HOSTS = [...]`                     | `"127.0.0.1, localhost"` → `['127.0.0.1', 'localhost']`. `strip()` probellarni olib tashlaydi, `if h.strip()` esa bo'sh elementlarni (`"a,,b"` yoki bo'sh qator) tashlab ketadi                                                                                                                                         |
 
 `DEBUG` o'girish tekshirildi: `True`, `true`, `1`, `yes` → `True`. `False`, `false`, `0` va bo'sh qator → `False`.
 
@@ -913,9 +914,9 @@ LANGUAGE_CODE = 'uz'
 TIME_ZONE = 'Asia/Tashkent'
 ```
 
-| Sozlama | Ta'siri |
-| --- | --- |
-| `LANGUAGE_CODE = 'uz'` | Admin panel va DRF xabarlari o'zbekcha chiqadi (Django'da tarjimasi bor qismlari) |
+| Sozlama                       | Ta'siri                                                                                                                                                                                                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `LANGUAGE_CODE = 'uz'`        | Admin panel va DRF xabarlari o'zbekcha chiqadi (Django'da tarjimasi bor qismlari)                                                                                                                                                                                                |
 | `TIME_ZONE = 'Asia/Tashkent'` | Admin panel va API vaqtni Toshkent vaqtida (`+05:00`) ko'rsatadi. `USE_TZ = True` bo'lgani uchun bazada vaqt baribir UTC'da saqlanadi, faqat ko'rsatish va kiritish Toshkent vaqtida bo'ladi. Windows'da vaqt zonalari bazasini `tzdata` paketi beradi, u allaqachon o'rnatilgan |
 
 ### 16.4. `.env.example` dan foydalanish
@@ -941,18 +942,18 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 
 Barcha modellar `restaurant/models.py` da, API kodi esa `api` app'ida (`Book` bilan bir joyda). Pul maydonlari: `DecimalField(max_digits=12, decimal_places=2)`, so'mda.
 
-| Model | Vazifasi | Muhim maydonlar va cheklovlar |
-| --- | --- | --- |
-| `Timestamped` | Abstract: jadval yaratilmaydi | `created_at`, `updated_at` |
+| Model                | Vazifasi                                   | Muhim maydonlar va cheklovlar                                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Timestamped`        | Abstract: jadval yaratilmaydi              | `created_at`, `updated_at`                                                                                                                                                                                                                        |
 | `RestaurantSettings` | Sozlamalar, **faqat bitta yozuv** (`pk=1`) | `name`, `phone`, `address`, `logo` (3 MB, JPEG/PNG/WebP), `opens_at`, `closes_at`, `reservation_duration` (120), `booking_days` (30), `service_percent` (0–30, standart 10). `CheckConstraint(id=1)`, `load()`, `clean()`: `closes_at > opens_at` |
-| `Profile` | Foydalanuvchi roli | `user` (OneToOne), `role`: `admin`, `waiter`, `chef`, `customer` (standart), `phone` |
-| `Category` | Menyu bo'limi | `name` (unique), `order`, `active` |
-| `MenuItem` | Taom | `price` (> 0), `image`, `preparation_minutes`, `available`, `is_vegetarian`, `spicy`. `UniqueConstraint(category, name)` |
-| `Table` | Stol | `number` (unique), `seats` (1–20), `location`: `hall`, `terrace`, `vip`, `active` |
-| `Reservation` | Bron | `guests`, `start`, `end`, `status`, `name`, `phone`, `note`. `CheckConstraint(end > start)`, `Index(table, start, end)` |
-| `Order` | Buyurtma | `order_type`, `status`, `note`, `service_percent` (buyurtma paytidagi qiymat), `subtotal`, `service_amount`, `total` (`editable=False`), `paid_at`, `recalculate()`, `change_status()` |
-| `OrderItem` | Buyurtma qatori | `quantity` (1–999), `unit_price` (buyurtma paytidagi narx), `line_total` (`editable=False`), `note` |
-| `OrderStatusEvent` | Holat tarixi, faqat o'qish | `previous_status`, `status`, `actor`, `changed_at` |
+| `Profile`            | Foydalanuvchi roli                         | `user` (OneToOne), `role`: `admin`, `waiter`, `chef`, `customer` (standart), `phone`                                                                                                                                                              |
+| `Category`           | Menyu bo'limi                              | `name` (unique), `order`, `active`                                                                                                                                                                                                                |
+| `MenuItem`           | Taom                                       | `price` (> 0), `image`, `preparation_minutes`, `available`, `is_vegetarian`, `spicy`. `UniqueConstraint(category, name)`                                                                                                                          |
+| `Table`              | Stol                                       | `number` (unique), `seats` (1–20), `location`: `hall`, `terrace`, `vip`, `active`                                                                                                                                                                 |
+| `Reservation`        | Bron                                       | `guests`, `start`, `end`, `status`, `name`, `phone`, `note`. `CheckConstraint(end > start)`, `Index(table, start, end)`                                                                                                                           |
+| `Order`              | Buyurtma                                   | `order_type`, `status`, `note`, `service_percent` (buyurtma paytidagi qiymat), `subtotal`, `service_amount`, `total` (`editable=False`), `paid_at`, `recalculate()`, `change_status()`                                                            |
+| `OrderItem`          | Buyurtma qatori                            | `quantity` (1–999), `unit_price` (buyurtma paytidagi narx), `line_total` (`editable=False`), `note`                                                                                                                                               |
+| `OrderStatusEvent`   | Holat tarixi, faqat o'qish                 | `previous_status`, `status`, `actor`, `changed_at`                                                                                                                                                                                                |
 
 ### 17.1. Bog'lanishlar
 
@@ -969,14 +970,14 @@ User ──1:N── Order (customer, waiter)
 User ──1:N── OrderStatusEvent (actor)
 ```
 
-| Bog'lanish | `on_delete` | Natija |
-| --- | --- | --- |
-| `MenuItem.category` | `PROTECT` | Taomi bor kategoriya o'chmaydi |
-| `OrderItem.menu_item` | `PROTECT` | Buyurtmada ishlatilgan taom o'chmaydi |
-| `Reservation.table`, `Order.table` | `PROTECT` | Broni yoki buyurtmasi bor stol o'chmaydi |
-| `Reservation.customer` | `PROTECT` | Broni bor foydalanuvchi o'chmaydi |
-| `OrderItem.order`, `OrderStatusEvent.order` | `CASCADE` | Buyurtma o'chsa, qatorlari va tarixi ham o'chadi |
-| `Order.customer`, `Order.waiter`, `Order.reservation`, `Reservation.created_by`, `OrderStatusEvent.actor` | `SET_NULL` | Foydalanuvchi yoki bron o'chsa ham buyurtma tarixi qoladi |
+| Bog'lanish                                                                                                | `on_delete` | Natija                                                    |
+| --------------------------------------------------------------------------------------------------------- | ----------- | --------------------------------------------------------- |
+| `MenuItem.category`                                                                                       | `PROTECT`   | Taomi bor kategoriya o'chmaydi                            |
+| `OrderItem.menu_item`                                                                                     | `PROTECT`   | Buyurtmada ishlatilgan taom o'chmaydi                     |
+| `Reservation.table`, `Order.table`                                                                        | `PROTECT`   | Broni yoki buyurtmasi bor stol o'chmaydi                  |
+| `Reservation.customer`                                                                                    | `PROTECT`   | Broni bor foydalanuvchi o'chmaydi                         |
+| `OrderItem.order`, `OrderStatusEvent.order`                                                               | `CASCADE`   | Buyurtma o'chsa, qatorlari va tarixi ham o'chadi          |
+| `Order.customer`, `Order.waiter`, `Order.reservation`, `Reservation.created_by`, `OrderStatusEvent.actor` | `SET_NULL`  | Foydalanuvchi yoki bron o'chsa ham buyurtma tarixi qoladi |
 
 ### 17.2. Narx nega "muzlatiladi"
 
@@ -992,14 +993,14 @@ total          = subtotal + service_amount
 
 ### 17.3. Admin panel
 
-| Model | Xususiyati |
-| --- | --- |
-| `RestaurantSettings` | Faqat bitta yozuv: ikkinchisini qo'shib ham, o'chirib ham bo'lmaydi |
-| `Category` | Ichida `MenuItem` inline |
-| `MenuItem` | Ro'yxatning o'zida `price` va `available` tahrirlanadi (`list_editable`) |
-| `Reservation` | `end` avtomatik hisoblanadi; ish vaqti, sig'im va vaqt to'qnashuvi `clean()` da tekshiriladi |
-| `Order` | Ichida `OrderItem` inline. Qator faqat `new` holatda qo'shiladi yoki o'chiriladi, mavjud qator tahrirlanmaydi. Saqlaganda summalar qayta hisoblanadi. `status` faqat o'qish uchun |
-| `OrderItem`, `OrderStatusEvent` | Faqat o'qish |
+| Model                           | Xususiyati                                                                                                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RestaurantSettings`            | Faqat bitta yozuv: ikkinchisini qo'shib ham, o'chirib ham bo'lmaydi                                                                                                               |
+| `Category`                      | Ichida `MenuItem` inline                                                                                                                                                          |
+| `MenuItem`                      | Ro'yxatning o'zida `price` va `available` tahrirlanadi (`list_editable`)                                                                                                          |
+| `Reservation`                   | `end` avtomatik hisoblanadi; ish vaqti, sig'im va vaqt to'qnashuvi `clean()` da tekshiriladi                                                                                      |
+| `Order`                         | Ichida `OrderItem` inline. Qator faqat `new` holatda qo'shiladi yoki o'chiriladi, mavjud qator tahrirlanmaydi. Saqlaganda summalar qayta hisoblanadi. `status` faqat o'qish uchun |
+| `OrderItem`, `OrderStatusEvent` | Faqat o'qish                                                                                                                                                                      |
 
 > Admin panelda tarixi bor buyurtmani o'chirib bo'lmaydi, chunki `OrderStatusEvent` da o'chirish huquqi yopiq va Django bog'langan yozuvlarni tekshiradi. Bu ataylab qoldirilgan: moliyaviy tarix tasodifan yo'qolmaydi.
 
@@ -1009,26 +1010,27 @@ total          = subtotal + service_amount
 
 Rol `Profile.role` dan olinadi. `is_superuser = True` har doim **admin**. Profili yo'q foydalanuvchi **customer** hisoblanadi. `is_staff` rolga ta'sir qilmaydi. Cheklovlar ikki qavatli: `api/permissions.py` amalni, `get_queryset` esa qaysi yozuvlar ko'rinishini belgilaydi. Shuning uchun boshqa birovning yozuvi **404** qaytaradi.
 
-| Resurs | Anonim | customer | chef | waiter | admin |
-| --- | --- | --- | --- | --- | --- |
-| Menyu, kategoriya, taom, stol, sozlamalar | O'qish | O'qish | O'qish | O'qish | **Hammasi** |
-| Bron | — | O'zinikini ko'radi, yaratadi, bekor qiladi | — | **Hammasi** | **Hammasi** |
-| Buyurtma | — | O'zinikini ko'radi, yaratadi | `new`, `cooking`, `ready` dagilarini ko'radi | **Hammasi** | **Hammasi** |
-| `set-status` | — | — | Faqat `cooking`, `ready` ga | Barcha ruxsat etilgan o'tishlar | Barcha ruxsat etilgan o'tishlar |
-| Oshxona ro'yxati | — | — | Ha | Ha | Ha |
-| Holat tarixi (o'qish) | — | O'z buyurtmalari | Ko'radigan buyurtmalari | Hammasi | Hammasi |
-| Profillar, kunlik hisobot | — | — | — | — | **Hammasi** |
-| Kitoblar (`Book`) | O'qish | **Hammasi** | **Hammasi** | **Hammasi** | **Hammasi** |
-| O'z foydalanuvchi hisobi (`users/me/`) | — | **Hammasi** | **Hammasi** | **Hammasi** | **Hammasi** |
-| Boshqa foydalanuvchilar (`users/`) | — | — | — | — | **Hammasi** (26.5-bo'lim) |
+| Resurs                                    | Anonim | customer                                   | chef                                         | waiter                          | admin                           |
+| ----------------------------------------- | ------ | ------------------------------------------ | -------------------------------------------- | ------------------------------- | ------------------------------- |
+| Menyu, kategoriya, taom, stol, sozlamalar | O'qish | O'qish                                     | O'qish                                       | O'qish                          | **Hammasi**                     |
+| Bron                                      | —      | O'zinikini ko'radi, yaratadi, bekor qiladi | —                                            | **Hammasi**                     | **Hammasi**                     |
+| Buyurtma                                  | —      | O'zinikini ko'radi, yaratadi               | `new`, `cooking`, `ready` dagilarini ko'radi | **Hammasi**                     | **Hammasi**                     |
+| `set-status`                              | —      | —                                          | Faqat `cooking`, `ready` ga                  | Barcha ruxsat etilgan o'tishlar | Barcha ruxsat etilgan o'tishlar |
+| Oshxona ro'yxati                          | —      | —                                          | Ha                                           | Ha                              | Ha                              |
+| Holat tarixi (o'qish)                     | —      | O'z buyurtmalari                           | Ko'radigan buyurtmalari                      | Hammasi                         | Hammasi                         |
+| Profillar, kunlik hisobot                 | —      | —                                          | —                                            | —                               | **Hammasi**                     |
+| Kitoblar (`Book`)                         | O'qish | **Hammasi**                                | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
+| Mahsulotlar (`products/`) | Ro'yxat | Ro'yxat, tafsilot, qo'shish; o'zinikini boshqaradi | Mijoz kabi | Mijoz kabi | **Hammasi** (27.2-bo'lim) |
+| O'z foydalanuvchi hisobi (`users/me/`)    | —      | **Hammasi**                                | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
+| Boshqa foydalanuvchilar (`users/`)        | —      | —                                          | —                                            | —                               | **Hammasi** (26.5-bo'lim)       |
 
 Avtomatik to'ldiriladigan maydonlar:
 
-| Rol | Bron | Buyurtma |
-| --- | --- | --- |
-| customer | `customer` va `created_by` = o'zi, `status` = `pending`; yuborgan qiymati e'tiborsiz qoldiriladi | `customer` = o'zi, `waiter` = bo'sh |
-| waiter | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi) | `waiter` = o'zi, `customer` tanlanadi |
-| admin | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi) | `waiter` va `customer` tanlanadi |
+| Rol      | Bron                                                                                             | Buyurtma                              |
+| -------- | ------------------------------------------------------------------------------------------------ | ------------------------------------- |
+| customer | `customer` va `created_by` = o'zi, `status` = `pending`; yuborgan qiymati e'tiborsiz qoldiriladi | `customer` = o'zi, `waiter` = bo'sh   |
+| waiter   | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi)                                     | `waiter` = o'zi, `customer` tanlanadi |
+| admin    | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi)                                     | `waiter` va `customer` tanlanadi      |
 
 > Topshiriqda oshpazning bronga va mijozning `set-status` ga huquqi ko'rsatilmagan, shuning uchun ikkalasi yopiq. Mijoz buyurtmani bekor qila olmaydi, buni ofitsiant qiladi.
 
@@ -1038,36 +1040,39 @@ Avtomatik to'ldiriladigan maydonlar:
 
 Barcha manzillar `/api/` bilan boshlanadi. Ro'yxatlar sahifalanadi (`?page=`), uchta maxsus ro'yxat (`menu`, `tables/available`, `orders/kitchen`) bundan mustasno. To'liq sxema: `/api/docs/`.
 
-| Metod | URL | Ruxsat | Vazifasi |
-| --- | --- | --- | --- |
-| POST | `token/`, `token/refresh/`, `token/verify/` | Hamma | JWT olish, yangilash va tekshirish (26-bo'lim) |
-| POST | `auth/register/`, `auth/logout/`, `auth/change-password/` | 26.2-bo'limga qarang | Ro'yxatdan o'tish, chiqish, parol |
-| GET, PUT, PATCH, DELETE | `users/me/`, `users/{id}/` | 26.2-bo'limga qarang | Foydalanuvchi hisobi |
-| GET | `users/` | admin | Foydalanuvchilar ro'yxati |
-| GET | `menu/` | Hamma | Faol kategoriyalar ichida mavjud taomlar |
-| GET | `settings/` | Hamma | Sozlamalar |
-| PUT, PATCH | `settings/` | admin | Sozlamalarni o'zgartirish |
-| GET | `categories/`, `categories/{id}/` | Hamma | Kategoriyalar |
-| POST, PUT, PATCH, DELETE | `categories/`, `categories/{id}/` | admin | Boshqarish |
-| GET | `menu-items/`, `menu-items/{id}/` | Hamma | Taomlar (`?category=`, `?available=`, `?is_vegetarian=`, `?spicy=`, `?search=`) |
-| POST, PUT, PATCH, DELETE | `menu-items/`, `menu-items/{id}/` | admin | Boshqarish |
-| GET | `tables/`, `tables/{id}/` | Hamma | Stollar (`?location=`, `?active=`, `?seats=`) |
-| POST, PUT, PATCH, DELETE | `tables/`, `tables/{id}/` | admin | Boshqarish |
-| GET | `tables/available/?start=...&guests=...` | Hamma | Shu vaqtda bo'sh va sig'adigan stollar |
-| GET | `reservations/`, `reservations/{id}/` | customer (o'ziniki), waiter, admin | Bronlar (`?table=`, `?status=`, `?customer=`) |
-| POST | `reservations/` | customer, waiter, admin | Bron yaratish |
-| PUT, PATCH, DELETE | `reservations/{id}/` | waiter, admin | Boshqarish |
-| POST | `reservations/{id}/cancel/` | customer (o'ziniki), waiter, admin | Bekor qilish (`pending` yoki `confirmed` holatidan) |
-| GET | `orders/`, `orders/{id}/` | customer (o'ziniki), chef (faol), waiter, admin | Buyurtmalar (`?status=`, `?order_type=`, `?table=`, `?customer=`, `?waiter=`) |
-| POST | `orders/` | customer, waiter, admin | Taomlar bilan birga yaratish |
-| PUT, PATCH, DELETE | `orders/{id}/` | waiter, admin | Boshqarish (`items` va `status` dan tashqari) |
-| POST | `orders/{id}/set-status/` | chef (cheklangan), waiter, admin | Holatni o'zgartirish |
-| GET | `orders/kitchen/` | chef, waiter, admin | `new` va `cooking`, eng eskisi birinchi |
-| GET | `order-events/`, `order-events/{id}/` | Login qilganlar (rol bo'yicha filtr) | Holat tarixi, faqat o'qish (`?order=`) |
-| GET, POST, PUT, PATCH, DELETE | `profiles/`, `profiles/{id}/` | admin | Profillar |
-| GET | `reports/daily/?date=YYYY-MM-DD` | admin | Kunlik hisobot (sana yuborilmasa, bugun) |
-| GET | `books/`, `books/{id}/` | Hamma | Kitoblar |
-| POST, PUT, PATCH, DELETE | `books/`, `books/{id}/` | Login qilganlar | Boshqarish |
+| Metod                         | URL                                                       | Ruxsat                                          | Vazifasi                                                                        |
+| ----------------------------- | --------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| POST                          | `token/`, `token/refresh/`, `token/verify/`               | Hamma                                           | JWT olish, yangilash va tekshirish (26-bo'lim)                                  |
+| POST                          | `auth/register/`, `auth/logout/`, `auth/change-password/` | 26.2-bo'limga qarang                            | Ro'yxatdan o'tish, chiqish, parol                                               |
+| GET, PUT, PATCH, DELETE       | `users/me/`, `users/{id}/`                                | 26.2-bo'limga qarang                            | Foydalanuvchi hisobi                                                            |
+| GET                           | `users/`                                                  | admin                                           | Foydalanuvchilar ro'yxati                                                       |
+| GET                           | `menu/`                                                   | Hamma                                           | Faol kategoriyalar ichida mavjud taomlar                                        |
+| GET                           | `settings/`                                               | Hamma                                           | Sozlamalar                                                                      |
+| PUT, PATCH                    | `settings/`                                               | admin                                           | Sozlamalarni o'zgartirish                                                       |
+| GET                           | `categories/`, `categories/{id}/`                         | Hamma                                           | Kategoriyalar                                                                   |
+| POST, PUT, PATCH, DELETE      | `categories/`, `categories/{id}/`                         | admin                                           | Boshqarish                                                                      |
+| GET                           | `menu-items/`, `menu-items/{id}/`                         | Hamma                                           | Taomlar (`?category=`, `?available=`, `?is_vegetarian=`, `?spicy=`, `?search=`) |
+| POST, PUT, PATCH, DELETE      | `menu-items/`, `menu-items/{id}/`                         | admin                                           | Boshqarish                                                                      |
+| GET                           | `tables/`, `tables/{id}/`                                 | Hamma                                           | Stollar (`?location=`, `?active=`, `?seats=`)                                   |
+| POST, PUT, PATCH, DELETE      | `tables/`, `tables/{id}/`                                 | admin                                           | Boshqarish                                                                      |
+| GET                           | `tables/available/?start=...&guests=...`                  | Hamma                                           | Shu vaqtda bo'sh va sig'adigan stollar                                          |
+| GET                           | `reservations/`, `reservations/{id}/`                     | customer (o'ziniki), waiter, admin              | Bronlar (`?table=`, `?status=`, `?customer=`)                                   |
+| POST                          | `reservations/`                                           | customer, waiter, admin                         | Bron yaratish                                                                   |
+| PUT, PATCH, DELETE            | `reservations/{id}/`                                      | waiter, admin                                   | Boshqarish                                                                      |
+| POST                          | `reservations/{id}/cancel/`                               | customer (o'ziniki), waiter, admin              | Bekor qilish (`pending` yoki `confirmed` holatidan)                             |
+| GET                           | `orders/`, `orders/{id}/`                                 | customer (o'ziniki), chef (faol), waiter, admin | Buyurtmalar (`?status=`, `?order_type=`, `?table=`, `?customer=`, `?waiter=`)   |
+| POST                          | `orders/`                                                 | customer, waiter, admin                         | Taomlar bilan birga yaratish                                                    |
+| PUT, PATCH, DELETE            | `orders/{id}/`                                            | waiter, admin                                   | Boshqarish (`items` va `status` dan tashqari)                                   |
+| POST                          | `orders/{id}/set-status/`                                 | chef (cheklangan), waiter, admin                | Holatni o'zgartirish                                                            |
+| GET                           | `orders/kitchen/`                                         | chef, waiter, admin                             | `new` va `cooking`, eng eskisi birinchi                                         |
+| GET                           | `order-events/`, `order-events/{id}/`                     | Login qilganlar (rol bo'yicha filtr)            | Holat tarixi, faqat o'qish (`?order=`)                                          |
+| GET, POST, PUT, PATCH, DELETE | `profiles/`, `profiles/{id}/`                             | admin                                           | Profillar                                                                       |
+| GET                           | `reports/daily/?date=YYYY-MM-DD`                          | admin                                           | Kunlik hisobot (sana yuborilmasa, bugun)                                        |
+| GET                           | `books/`, `books/{id}/`                                   | Hamma                                           | Kitoblar                                                                        |
+| POST, PUT, PATCH, DELETE      | `books/`, `books/{id}/`                                   | Login qilganlar                                 | Boshqarish                                                                      |
+| GET | `products/` | Hamma | Mahsulotlar ro'yxati (27-bo'lim) |
+| GET, POST | `products/{id}/`, `products/` | Login qilganlar | Tafsilot va qo'shish |
+| PUT, PATCH, DELETE | `products/{id}/` | Egasi yoki admin | Boshqarish |
 
 Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rolga ruxsat yo'q, **404** yozuv yo'q yoki sizga ko'rinmaydi.
 
@@ -1081,15 +1086,15 @@ Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rol
 
 ### 20.1. Bron
 
-| Qoida | Xato qaysi maydonda |
-| --- | --- |
-| `guests` stol sig'imidan oshmasin | `guests` |
-| Stol faol bo'lsin | `table` |
-| O'tgan vaqtga bron qilib bo'lmaydi | `start` |
-| `booking_days` kundan uzoq bo'lmasin | `start` |
-| Butun bron ish vaqtiga sig'sin: `start >= opens_at` va `end <= closes_at`, bitta kun ichida | `start` |
-| `end` har doim serverda: `start + reservation_duration`; yuborilgan qiymat e'tiborsiz qoldiriladi | — |
-| Shu stolda vaqt to'qnashuvi bo'lmasin; `cancelled`, `no_show`, `completed` hisobga olinmaydi | `start` |
+| Qoida                                                                                             | Xato qaysi maydonda |
+| ------------------------------------------------------------------------------------------------- | ------------------- |
+| `guests` stol sig'imidan oshmasin                                                                 | `guests`            |
+| Stol faol bo'lsin                                                                                 | `table`             |
+| O'tgan vaqtga bron qilib bo'lmaydi                                                                | `start`             |
+| `booking_days` kundan uzoq bo'lmasin                                                              | `start`             |
+| Butun bron ish vaqtiga sig'sin: `start >= opens_at` va `end <= closes_at`, bitta kun ichida       | `start`             |
+| `end` har doim serverda: `start + reservation_duration`; yuborilgan qiymat e'tiborsiz qoldiriladi | —                   |
+| Shu stolda vaqt to'qnashuvi bo'lmasin; `cancelled`, `no_show`, `completed` hisobga olinmaydi      | `start`             |
 
 - **Ish vaqti misoli:** 10:00–23:00 va 120 daqiqada eng kech bron 21:00 da boshlanadi.
 - **Yonma-yon bronlar ruxsat etiladi:** 12:00–14:00 va 14:00–16:00 to'qnashmaydi.
@@ -1100,16 +1105,16 @@ Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rol
 
 ### 20.2. Buyurtma
 
-| Qoida | Natija |
-| --- | --- |
-| `items` majburiy va bo'sh bo'lmasin | 400 |
-| `available=False` yoki faol bo'lmagan kategoriyadagi taom qo'shilmaydi | 400 |
-| `quantity` 1 dan 999 gacha | 400 |
+| Qoida                                                                                                                    | Natija                             |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- |
+| `items` majburiy va bo'sh bo'lmasin                                                                                      | 400                                |
+| `available=False` yoki faol bo'lmagan kategoriyadagi taom qo'shilmaydi                                                   | 400                                |
+| `quantity` 1 dan 999 gacha                                                                                               | 400                                |
 | `unit_price`, `line_total`, `subtotal`, `service_amount`, `total`, `service_percent`, `status`, `paid_at` faqat serverda | Yuborilgani e'tiborsiz qoldiriladi |
-| `dine_in` uchun `table` majburiy, stol faol bo'lsin | 400 |
-| Mijoz faqat o'z bronini bog'lay oladi; bron stoli buyurtma stoli bilan bir xil bo'lsin | 400 |
-| Yaratilgandan keyin `items` o'zgarmaydi | 400 |
-| `paid` yoki `cancelled` buyurtma tahrirlanmaydi | 400 |
+| `dine_in` uchun `table` majburiy, stol faol bo'lsin                                                                      | 400                                |
+| Mijoz faqat o'z bronini bog'lay oladi; bron stoli buyurtma stoli bilan bir xil bo'lsin                                   | 400                                |
+| Yaratilgandan keyin `items` o'zgarmaydi                                                                                  | 400                                |
+| `paid` yoki `cancelled` buyurtma tahrirlanmaydi                                                                          | 400                                |
 
 ### 20.3. O'chirish
 
@@ -1135,14 +1140,14 @@ Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rol
                            └───────────┘
 ```
 
-| Qoida | Tafsilot |
-| --- | --- |
-| Tartib | Bosqichni sakrab yoki orqaga o'tib bo'lmaydi: 400 |
-| Yakuniy holatlar | `paid` va `cancelled` dan hech qayerga o'tilmaydi |
+| Qoida                   | Tafsilot                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| Tartib                  | Bosqichni sakrab yoki orqaga o'tib bo'lmaydi: 400                                       |
+| Yakuniy holatlar        | `paid` va `cancelled` dan hech qayerga o'tilmaydi                                       |
 | Holat qayerda o'zgaradi | Faqat `POST /api/orders/{id}/set-status/`. `PATCH` dagi `status` e'tiborsiz qoldiriladi |
-| Tarix | Yaratilish va har bir o'tish `OrderStatusEvent` ga yoziladi |
-| To'lov | `paid` bo'lganda `paid_at` qo'yiladi |
-| Oshpaz | Faqat `new → cooking` va `cooking → ready`. Boshqa holatga urinish: 403 |
+| Tarix                   | Yaratilish va har bir o'tish `OrderStatusEvent` ga yoziladi                             |
+| To'lov                  | `paid` bo'lganda `paid_at` qo'yiladi                                                    |
+| Oshpaz                  | Faqat `new → cooking` va `cooking → ready`. Boshqa holatga urinish: 403                 |
 
 ---
 
@@ -1156,28 +1161,28 @@ Javobning birinchi kategoriyasi, birinchi taomi (qolganlari qisqartirildi):
 
 ```json
 [
-  {
-    "id": 1,
-    "name": "Milliy taomlar",
-    "order": 1,
-    "items": [
-      {
-        "id": 2,
-        "category_name": "Milliy taomlar",
-        "created_at": "2026-11-04T08:53:40.708079+05:00",
-        "updated_at": "2026-11-04T08:53:40.708147+05:00",
-        "name": "Lag‘mon",
-        "description": "Qo‘lda cho‘zilgan xamir, go‘sht va sabzavot",
-        "price": "38000.00",
-        "image": null,
-        "preparation_minutes": 25,
-        "available": true,
-        "is_vegetarian": false,
-        "spicy": true,
-        "category": 1
-      }
-    ]
-  }
+	{
+		"id": 1,
+		"name": "Milliy taomlar",
+		"order": 1,
+		"items": [
+			{
+				"id": 2,
+				"category_name": "Milliy taomlar",
+				"created_at": "2026-11-04T08:53:40.708079+05:00",
+				"updated_at": "2026-11-04T08:53:40.708147+05:00",
+				"name": "Lag‘mon",
+				"description": "Qo‘lda cho‘zilgan xamir, go‘sht va sabzavot",
+				"price": "38000.00",
+				"image": null,
+				"preparation_minutes": 25,
+				"available": true,
+				"is_vegetarian": false,
+				"spicy": true,
+				"category": 1
+			}
+		]
+	}
 ]
 ```
 
@@ -1185,17 +1190,17 @@ Javobning birinchi kategoriyasi, birinchi taomi (qolganlari qisqartirildi):
 
 ```json
 {
-  "created_at": "2026-11-04T08:53:40.704517+05:00",
-  "updated_at": "2026-11-04T08:53:40.704762+05:00",
-  "name": "Choyxona Registon",
-  "phone": "+998712000000",
-  "address": "Toshkent, Amir Temur ko‘chasi, 1",
-  "logo": null,
-  "opens_at": "10:00:00",
-  "closes_at": "23:00:00",
-  "reservation_duration": 120,
-  "booking_days": 30,
-  "service_percent": "10.00"
+	"created_at": "2026-11-04T08:53:40.704517+05:00",
+	"updated_at": "2026-11-04T08:53:40.704762+05:00",
+	"name": "Choyxona Registon",
+	"phone": "+998712000000",
+	"address": "Toshkent, Amir Temur ko‘chasi, 1",
+	"logo": null,
+	"opens_at": "10:00:00",
+	"closes_at": "23:00:00",
+	"reservation_duration": 120,
+	"booking_days": 30,
+	"service_percent": "10.00"
 }
 ```
 
@@ -1205,16 +1210,16 @@ Avval eng kichik mos stol chiqadi. Birinchi yozuv:
 
 ```json
 [
-  {
-    "id": 3,
-    "location_name": "Zal",
-    "created_at": "2026-11-04T08:53:40.716163+05:00",
-    "updated_at": "2026-11-04T08:53:40.716203+05:00",
-    "number": 3,
-    "seats": 4,
-    "location": "hall",
-    "active": true
-  }
+	{
+		"id": 3,
+		"location_name": "Zal",
+		"created_at": "2026-11-04T08:53:40.716163+05:00",
+		"updated_at": "2026-11-04T08:53:40.716203+05:00",
+		"number": 3,
+		"seats": 4,
+		"location": "hall",
+		"active": true
+	}
 ]
 ```
 
@@ -1224,12 +1229,12 @@ So'rov:
 
 ```json
 {
-  "table": 3,
-  "guests": 4,
-  "start": "2026-11-06T18:00:00+05:00",
-  "name": "Ali Valiyev",
-  "phone": "+998901234567",
-  "note": "Deraza yonida"
+	"table": 3,
+	"guests": 4,
+	"start": "2026-11-06T18:00:00+05:00",
+	"name": "Ali Valiyev",
+	"phone": "+998901234567",
+	"note": "Deraza yonida"
 }
 ```
 
@@ -1237,21 +1242,21 @@ Javob `201`. `end`, `customer`, `created_by` va `status` serverda qo'yilgan:
 
 ```json
 {
-  "id": 1,
-  "table_number": 3,
-  "status_name": "Kutilmoqda",
-  "created_at": "2026-11-04T08:53:46.160827+05:00",
-  "updated_at": "2026-11-04T08:53:46.160959+05:00",
-  "guests": 4,
-  "start": "2026-11-06T18:00:00+05:00",
-  "end": "2026-11-06T20:00:00+05:00",
-  "status": "pending",
-  "name": "Ali Valiyev",
-  "phone": "+998901234567",
-  "note": "Deraza yonida",
-  "customer": 4,
-  "table": 3,
-  "created_by": 4
+	"id": 1,
+	"table_number": 3,
+	"status_name": "Kutilmoqda",
+	"created_at": "2026-11-04T08:53:46.160827+05:00",
+	"updated_at": "2026-11-04T08:53:46.160959+05:00",
+	"guests": 4,
+	"start": "2026-11-06T18:00:00+05:00",
+	"end": "2026-11-06T20:00:00+05:00",
+	"status": "pending",
+	"name": "Ali Valiyev",
+	"phone": "+998901234567",
+	"note": "Deraza yonida",
+	"customer": 4,
+	"table": 3,
+	"created_by": 4
 }
 ```
 
@@ -1271,12 +1276,12 @@ So'rov:
 
 ```json
 {
-  "table": 3,
-  "order_type": "dine_in",
-  "items": [
-    { "menu_item": 1, "quantity": 2, "note": "Kam yog‘li" },
-    { "menu_item": 8, "quantity": 1 }
-  ]
+	"table": 3,
+	"order_type": "dine_in",
+	"items": [
+		{ "menu_item": 1, "quantity": 2, "note": "Kam yog‘li" },
+		{ "menu_item": 8, "quantity": 1 }
+	]
 }
 ```
 
@@ -1284,44 +1289,44 @@ Javob `201`:
 
 ```json
 {
-  "id": 1,
-  "items": [
-    {
-      "id": 1,
-      "menu_item": 1,
-      "menu_item_name": "Osh",
-      "quantity": 2,
-      "unit_price": "45000.00",
-      "line_total": "90000.00",
-      "note": "Kam yog‘li"
-    },
-    {
-      "id": 2,
-      "menu_item": 8,
-      "menu_item_name": "Ko‘k choy",
-      "quantity": 1,
-      "unit_price": "8000.00",
-      "line_total": "8000.00",
-      "note": ""
-    }
-  ],
-  "table_number": 3,
-  "status_name": "Yangi",
-  "order_type_name": "Restoranda",
-  "created_at": "2026-11-04T08:53:46.172062+05:00",
-  "updated_at": "2026-11-04T08:53:46.173641+05:00",
-  "order_type": "dine_in",
-  "status": "new",
-  "note": "",
-  "service_percent": "10.00",
-  "subtotal": "98000.00",
-  "service_amount": "9800.00",
-  "total": "107800.00",
-  "paid_at": null,
-  "table": 3,
-  "customer": null,
-  "waiter": 2,
-  "reservation": null
+	"id": 1,
+	"items": [
+		{
+			"id": 1,
+			"menu_item": 1,
+			"menu_item_name": "Osh",
+			"quantity": 2,
+			"unit_price": "45000.00",
+			"line_total": "90000.00",
+			"note": "Kam yog‘li"
+		},
+		{
+			"id": 2,
+			"menu_item": 8,
+			"menu_item_name": "Ko‘k choy",
+			"quantity": 1,
+			"unit_price": "8000.00",
+			"line_total": "8000.00",
+			"note": ""
+		}
+	],
+	"table_number": 3,
+	"status_name": "Yangi",
+	"order_type_name": "Restoranda",
+	"created_at": "2026-11-04T08:53:46.172062+05:00",
+	"updated_at": "2026-11-04T08:53:46.173641+05:00",
+	"order_type": "dine_in",
+	"status": "new",
+	"note": "",
+	"service_percent": "10.00",
+	"subtotal": "98000.00",
+	"service_amount": "9800.00",
+	"total": "107800.00",
+	"paid_at": null,
+	"table": 3,
+	"customer": null,
+	"waiter": 2,
+	"reservation": null
 }
 ```
 
@@ -1347,41 +1352,41 @@ Yangisi birinchi. Uch yozuv (`count: 5`, qolganlari qisqartirildi):
 
 ```json
 {
-  "count": 5,
-  "next": null,
-  "previous": null,
-  "results": [
-    {
-      "id": 5,
-      "status_name": "To‘langan",
-      "actor_username": "waiter1",
-      "previous_status": "served",
-      "status": "paid",
-      "changed_at": "2026-11-04T08:53:46.200332+05:00",
-      "order": 1,
-      "actor": 2
-    },
-    {
-      "id": 2,
-      "status_name": "Tayyorlanmoqda",
-      "actor_username": "chef1",
-      "previous_status": "new",
-      "status": "cooking",
-      "changed_at": "2026-11-04T08:53:46.185233+05:00",
-      "order": 1,
-      "actor": 3
-    },
-    {
-      "id": 1,
-      "status_name": "Yangi",
-      "actor_username": "waiter1",
-      "previous_status": "",
-      "status": "new",
-      "changed_at": "2026-11-04T08:53:46.173860+05:00",
-      "order": 1,
-      "actor": 2
-    }
-  ]
+	"count": 5,
+	"next": null,
+	"previous": null,
+	"results": [
+		{
+			"id": 5,
+			"status_name": "To‘langan",
+			"actor_username": "waiter1",
+			"previous_status": "served",
+			"status": "paid",
+			"changed_at": "2026-11-04T08:53:46.200332+05:00",
+			"order": 1,
+			"actor": 2
+		},
+		{
+			"id": 2,
+			"status_name": "Tayyorlanmoqda",
+			"actor_username": "chef1",
+			"previous_status": "new",
+			"status": "cooking",
+			"changed_at": "2026-11-04T08:53:46.185233+05:00",
+			"order": 1,
+			"actor": 3
+		},
+		{
+			"id": 1,
+			"status_name": "Yangi",
+			"actor_username": "waiter1",
+			"previous_status": "",
+			"status": "new",
+			"changed_at": "2026-11-04T08:53:46.173860+05:00",
+			"order": 1,
+			"actor": 2
+		}
+	]
 }
 ```
 
@@ -1389,14 +1394,14 @@ Yangisi birinchi. Uch yozuv (`count: 5`, qolganlari qisqartirildi):
 
 ```json
 {
-  "date": "2026-11-04",
-  "orders_count": 1,
-  "paid_orders_count": 1,
-  "paid_total": "107800.00",
-  "top_items": [
-    { "menu_item": 1, "name": "Osh", "quantity": 2, "revenue": "90000.00" },
-    { "menu_item": 8, "name": "Ko‘k choy", "quantity": 1, "revenue": "8000.00" }
-  ]
+	"date": "2026-11-04",
+	"orders_count": 1,
+	"paid_orders_count": 1,
+	"paid_total": "107800.00",
+	"top_items": [
+		{ "menu_item": 1, "name": "Osh", "quantity": 2, "revenue": "90000.00" },
+		{ "menu_item": 8, "name": "Ko‘k choy", "quantity": 1, "revenue": "8000.00" }
+	]
 }
 ```
 
@@ -1410,20 +1415,20 @@ python manage.py seed_restaurant
 
 Buyruq `restaurant/management/commands/seed_restaurant.py` da. U `get_or_create` ishlatadi, shuning uchun qayta ishga tushirilsa takrorlamaydi va qo'lda o'zgartirilgan narx yoki parolni ham qayta yozmaydi.
 
-| Nima | Soni |
-| --- | --- |
-| Sozlamalar | 1 ("Choyxona Registon", 10:00–23:00) |
-| Kategoriyalar | 4: Milliy taomlar, Salatlar, Ichimliklar, Shirinliklar |
-| Taomlar | 14: osh, lag'mon, manti, shashlik, achchiq-chuchuk va boshqalar |
-| Stollar | 8: 5 ta zal, 2 ta teras, 1 ta VIP |
+| Nima          | Soni                                                            |
+| ------------- | --------------------------------------------------------------- |
+| Sozlamalar    | 1 ("Choyxona Registon", 10:00–23:00)                            |
+| Kategoriyalar | 4: Milliy taomlar, Salatlar, Ichimliklar, Shirinliklar          |
+| Taomlar       | 14: osh, lag'mon, manti, shashlik, achchiq-chuchuk va boshqalar |
+| Stollar       | 8: 5 ta zal, 2 ta teras, 1 ta VIP                               |
 
 Test foydalanuvchilar:
 
-| Login | Parol | Rol |
-| --- | --- | --- |
-| `waiter1` | `Restoran2026!` | Ofitsiant |
-| `chef1` | `Restoran2026!` | Oshpaz |
-| `customer1` | `Restoran2026!` | Mijoz |
+| Login       | Parol           | Rol       |
+| ----------- | --------------- | --------- |
+| `waiter1`   | `Restoran2026!` | Ofitsiant |
+| `chef1`     | `Restoran2026!` | Oshpaz    |
+| `customer1` | `Restoran2026!` | Mijoz     |
 
 > Bu parollar hammaga ochiq, chunki README git'da turadi. Seed'ni faqat ishlab chiqishda ishlating, serverda ishga tushirmang.
 
@@ -1441,30 +1446,31 @@ python manage.py test api.tests.ReservationTests.test_overlap_rejected
 
 Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.py` da.
 
-| Klass | Nimani tekshiradi |
-| --- | --- |
-| `CatalogPermissionTests` | Menyu, stol va sozlamalarga ruxsatlar; `/api/menu/` filtri; `/api/schema/` |
-| `SettingsSingletonTests` | Yagona yozuv, baza cheklovi, ish vaqti, foiz, logotip formati va hajmi |
-| `ReservationTests` | Rollar, to'qnashuv, sig'im, ish vaqti, o'tgan va uzoq sana, `tables/available` |
-| `OrderCreateTests` | Summalar, yaxlitlash, narx muzlashi, mavjud bo'lmagan taom, `dine_in` da stol |
-| `OrderPermissionTests` | Har bir rol uchun buyurtmaga ruxsatlar |
-| `OrderStatusTests` | To'g'ri va noto'g'ri o'tishlar, tarix, `paid_at` |
-| `ChefTests` | Oshpaz cheklovlari va `orders/kitchen` |
-| `OrderEventTests` | Tarix faqat o'qish uchun, rol bo'yicha filtr |
-| `ProtectedDeleteTests` | `ProtectedError` → 400 |
-| `DailyReportTests` | Hisobot ruxsati va qiymatlari |
-| `BookTests` | `Book` CRUD |
-| `AdminTests` | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish |
-| `SeedTests` | Seed takrorlamasligi |
-| `RegisterTests` | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol |
-| `JWTTests` | Token olish, verify, refresh, rotatsiya, Basic auth |
-| `UserMeTests` | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi, parol yuborilsa 400 |
-| `UserDetailTests` | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi |
-| `UserListTests` | Faqat admin, qidiruv va filtr |
-| `ChangePasswordTests` | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi |
-| `LogoutTests` | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi |
-| `ThrottleTests` | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish |
-| `UzbekMessageTests` | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan |
+| Klass                    | Nimani tekshiradi                                                                                         |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `CatalogPermissionTests` | Menyu, stol va sozlamalarga ruxsatlar; `/api/menu/` filtri; `/api/schema/`                                |
+| `SettingsSingletonTests` | Yagona yozuv, baza cheklovi, ish vaqti, foiz, logotip formati va hajmi                                    |
+| `ReservationTests`       | Rollar, to'qnashuv, sig'im, ish vaqti, o'tgan va uzoq sana, `tables/available`                            |
+| `OrderCreateTests`       | Summalar, yaxlitlash, narx muzlashi, mavjud bo'lmagan taom, `dine_in` da stol                             |
+| `OrderPermissionTests`   | Har bir rol uchun buyurtmaga ruxsatlar                                                                    |
+| `OrderStatusTests`       | To'g'ri va noto'g'ri o'tishlar, tarix, `paid_at`                                                          |
+| `ChefTests`              | Oshpaz cheklovlari va `orders/kitchen`                                                                    |
+| `OrderEventTests`        | Tarix faqat o'qish uchun, rol bo'yicha filtr                                                              |
+| `ProtectedDeleteTests`   | `ProtectedError` → 400                                                                                    |
+| `DailyReportTests`       | Hisobot ruxsati va qiymatlari                                                                             |
+| `BookTests`              | `Book` CRUD                                                                                               |
+| `AdminTests`             | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish                                               |
+| `SeedTests`              | Seed takrorlamasligi                                                                                      |
+| `RegisterTests`          | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol                                |
+| `JWTTests`               | Token olish, verify, refresh, rotatsiya, Basic auth                                                       |
+| `UserMeTests`            | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi, parol yuborilsa 400              |
+| `UserDetailTests`        | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi                                                    |
+| `UserListTests`          | Faqat admin, qidiruv va filtr                                                                             |
+| `ChangePasswordTests`    | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi                                                        |
+| `LogoutTests`            | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi                                        |
+| `ThrottleTests`          | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish |
+| `UzbekMessageTests`      | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan                                                |
+| `ProductAPITests` | Ro'yxat, tafsilot, ruxsatlar, egasi va admin, narx, nom va rasm validatsiyasi, qidiruv, saralash, admin panel |
 
 ---
 
@@ -1494,23 +1500,23 @@ Bu bo'lim foydalanuvchi API'si, JWT oqimi va ruxsatlarni tushuntiradi. Kod: `api
 Authorization: Bearer eyJhbGciOi...
 ```
 
-| | Access token | Refresh token |
-| --- | --- | --- |
-| Vazifasi | API'ga har bir so'rovda yuboriladi | Yangi access token olish uchun |
-| Muddati | 30 daqiqa | 7 kun |
-| Qayerga yuboriladi | Barcha API so'rovlariga | Faqat `/api/token/refresh/` va `/api/auth/logout/` ga |
-| Bekor qilinadimi | Yo'q, muddati tugaguncha ishlaydi | Ha, blacklist orqali |
+|                    | Access token                       | Refresh token                                         |
+| ------------------ | ---------------------------------- | ----------------------------------------------------- |
+| Vazifasi           | API'ga har bir so'rovda yuboriladi | Yangi access token olish uchun                        |
+| Muddati            | 30 daqiqa                          | 7 kun                                                 |
+| Qayerga yuboriladi | Barcha API so'rovlariga            | Faqat `/api/token/refresh/` va `/api/auth/logout/` ga |
+| Bekor qilinadimi   | Yo'q, muddati tugaguncha ishlaydi  | Ha, blacklist orqali                                  |
 
 **Nega ikkita token:** access token ko'p yuboriladi, shuning uchun o'g'irlanish xavfi yuqoriroq, lekin u tez eskiradi. Foydalanuvchi esa har 30 daqiqada parol kiritmaydi, buni refresh token qiladi.
 
 **Rotate va blacklist nima uchun:**
 
-| Sozlama | Nima qiladi | Nima beradi |
-| --- | --- | --- |
-| `ROTATE_REFRESH_TOKENS` | Har refresh'da yangi refresh token beriladi | Token umrbod bitta bo'lib qolmaydi |
-| `BLACKLIST_AFTER_ROTATION` | Ishlatilgan refresh token bekor qilinadi | O'g'irlangan eski token qayta ishlamaydi |
-| `token_blacklist` app'i | Tokenlarni `OutstandingToken` va `BlacklistedToken` jadvallarida saqlaydi | Logout va parol almashtirishda tokenni bekor qilish mumkin bo'ladi |
-| `UPDATE_LAST_LOGIN` | Token olganda `last_login` yangilanadi | Oxirgi kirish vaqti ko'rinadi |
+| Sozlama                    | Nima qiladi                                                               | Nima beradi                                                        |
+| -------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `ROTATE_REFRESH_TOKENS`    | Har refresh'da yangi refresh token beriladi                               | Token umrbod bitta bo'lib qolmaydi                                 |
+| `BLACKLIST_AFTER_ROTATION` | Ishlatilgan refresh token bekor qilinadi                                  | O'g'irlangan eski token qayta ishlamaydi                           |
+| `token_blacklist` app'i    | Tokenlarni `OutstandingToken` va `BlacklistedToken` jadvallarida saqlaydi | Logout va parol almashtirishda tokenni bekor qilish mumkin bo'ladi |
+| `UPDATE_LAST_LOGIN`        | Token olganda `last_login` yangilanadi                                    | Oxirgi kirish vaqti ko'rinadi                                      |
 
 > **Muhim cheklov:** blacklist faqat refresh tokenlarga ishlaydi. Logout, parol almashtirish yoki `DELETE` dan keyin ham chiqarilgan **access token** o'z muddati tugaguncha, ya'ni ko'pi bilan 30 daqiqa ishlashi mumkin. Istisno: nofaol foydalanuvchining access tokeni darhol rad etiladi (`Foydalanuvchi faol emas.`), chunki `is_active` har so'rovda tekshiriladi.
 
@@ -1524,31 +1530,31 @@ Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthe
 
 ### 26.2. Endpointlar
 
-| Metod | URL | Kim ishlatadi | Muvaffaqiyat | Xatolar |
-| --- | --- | --- | --- | --- |
-| POST | `/api/auth/register/` | Hamma, 5/daqiqa | 201 | 400, 429 |
-| POST | `/api/token/` | Hamma, 5/daqiqa | 200 | 400, 401, 429 |
-| POST | `/api/token/refresh/` | Refresh token egasi | 200 | 400, 401 |
-| POST | `/api/token/verify/` | Hamma | 200 | 400 (bekor qilingan), 401 (noto'g'ri) |
-| POST | `/api/auth/logout/` | Login qilganlar, faqat o'z tokeni | 205 | 400, 401 |
-| POST | `/api/auth/change-password/` | Login qilganlar, 5/daqiqa | 200 | 400, 401, 429 |
-| GET | `/api/users/me/` | Login qilganlar | 200 | 401 |
-| PUT, PATCH | `/api/users/me/` | Login qilganlar | 200 | 400, 401 |
-| DELETE | `/api/users/me/` | Login qilganlar (superuser'dan tashqari) | 204 | 400, 401 |
-| GET | `/api/users/` | Admin. `?search=`, `?is_active=`, `?ordering=`, `?page=` | 200 | 401, 403 |
-| GET | `/api/users/{id}/` | Egasi yoki admin | 200 | 401, 403, 404 |
-| PUT, PATCH | `/api/users/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
-| DELETE | `/api/users/{id}/` | Egasi yoki admin | 204 | 400, 401, 403, 404 |
+| Metod      | URL                          | Kim ishlatadi                                            | Muvaffaqiyat | Xatolar                               |
+| ---------- | ---------------------------- | -------------------------------------------------------- | ------------ | ------------------------------------- |
+| POST       | `/api/auth/register/`        | Hamma, 5/daqiqa                                          | 201          | 400, 429                              |
+| POST       | `/api/token/`                | Hamma, 5/daqiqa                                          | 200          | 400, 401, 429                         |
+| POST       | `/api/token/refresh/`        | Refresh token egasi                                      | 200          | 400, 401                              |
+| POST       | `/api/token/verify/`         | Hamma                                                    | 200          | 400 (bekor qilingan), 401 (noto'g'ri) |
+| POST       | `/api/auth/logout/`          | Login qilganlar, faqat o'z tokeni                        | 205          | 400, 401                              |
+| POST       | `/api/auth/change-password/` | Login qilganlar, 5/daqiqa                                | 200          | 400, 401, 429                         |
+| GET        | `/api/users/me/`             | Login qilganlar                                          | 200          | 401                                   |
+| PUT, PATCH | `/api/users/me/`             | Login qilganlar                                          | 200          | 400, 401                              |
+| DELETE     | `/api/users/me/`             | Login qilganlar (superuser'dan tashqari)                 | 204          | 400, 401                              |
+| GET        | `/api/users/`                | Admin. `?search=`, `?is_active=`, `?ordering=`, `?page=` | 200          | 401, 403                              |
+| GET        | `/api/users/{id}/`           | Egasi yoki admin                                         | 200          | 401, 403, 404                         |
+| PUT, PATCH | `/api/users/{id}/`           | Egasi yoki admin                                         | 200          | 400, 401, 403, 404                    |
+| DELETE     | `/api/users/{id}/`           | Egasi yoki admin                                         | 204          | 400, 401, 403, 404                    |
 
 **Javobdagi maydonlar:**
 
-| Maydon | Yozish mumkinmi | Izoh |
-| --- | --- | --- |
-| `username`, `first_name`, `last_name` | Ha | |
-| `email` | Ha | Bo'sh bo'lishi mumkin. Bo'sh bo'lmasa, boshqa foydalanuvchida bo'lmasin (katta-kichik harf farqsiz) |
-| `password` | Yo'q | Yuborilsa **400**: parol faqat `/api/auth/change-password/` orqali, eski parol bilan o'zgaradi |
-| `role`, `is_active`, `date_joined`, `last_login` | Yo'q | Yuborilgan qiymat e'tiborsiz qoldiriladi |
-| `id` | Yo'q | |
+| Maydon                                           | Yozish mumkinmi | Izoh                                                                                                |
+| ------------------------------------------------ | --------------- | --------------------------------------------------------------------------------------------------- |
+| `username`, `first_name`, `last_name`            | Ha              |                                                                                                     |
+| `email`                                          | Ha              | Bo'sh bo'lishi mumkin. Bo'sh bo'lmasa, boshqa foydalanuvchida bo'lmasin (katta-kichik harf farqsiz) |
+| `password`                                       | Yo'q            | Yuborilsa **400**: parol faqat `/api/auth/change-password/` orqali, eski parol bilan o'zgaradi      |
+| `role`, `is_active`, `date_joined`, `last_login` | Yo'q            | Yuborilgan qiymat e'tiborsiz qoldiriladi                                                            |
+| `id`                                             | Yo'q            |                                                                                                     |
 
 `is_staff` va `is_superuser` serializer'da umuman yo'q, shuning uchun ularni API orqali o'zgartirib bo'lmaydi. Rolni admin `/api/profiles/` orqali, nofaol hisobni qayta faollashtirishni esa `/admin/` panelida qiladi.
 
@@ -1557,25 +1563,25 @@ Registratsiyada `email`, `first_name`, `last_name` ixtiyoriy.
 > **Nega parol jimgina e'tiborsiz qoldirilmaydi:** aks holda javob `200` bo'lardi va mijoz parol almashdi deb o'ylab qolardi. Admin ham boshqa foydalanuvchi parolini API orqali o'rnata olmaydi: buni `/admin/` paneli yoki `python manage.py changepassword <login>` bilan qiladi.
 
 ```json
-{"password":["Parolni change-password orqali o‘zgartiring."]}
+{ "password": ["Parolni change-password orqali o‘zgartiring."] }
 ```
 
 ### 26.3. PUT va PATCH farqi
 
 Boshlanishida: `first_name = "Ali"`, `last_name = "Valiyev"`.
 
-| | `PATCH` | `PUT` |
-| --- | --- | --- |
-| Ma'nosi | Qisman tahrirlash | To'liq tahrirlash |
-| Majburiy maydonlar | Yo'q | `username` majburiy |
-| So'rov | `{"first_name":"Alijon"}` | `{"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Karimov"}` |
-| Natija | Faqat `first_name` o'zgaradi, `last_name` hali `Valiyev` | Yuborilgan to'rtala maydon yoziladi |
-| `username` siz yuborilsa | Ishlaydi | 400 |
+|                          | `PATCH`                                                  | `PUT`                                                                                      |
+| ------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Ma'nosi                  | Qisman tahrirlash                                        | To'liq tahrirlash                                                                          |
+| Majburiy maydonlar       | Yo'q                                                     | `username` majburiy                                                                        |
+| So'rov                   | `{"first_name":"Alijon"}`                                | `{"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Karimov"}` |
+| Natija                   | Faqat `first_name` o'zgaradi, `last_name` hali `Valiyev` | Yuborilgan to'rtala maydon yoziladi                                                        |
+| `username` siz yuborilsa | Ishlaydi                                                 | 400                                                                                        |
 
 Haqiqiy `PUT` javobi, `username` yuborilmaganda (`400`):
 
 ```json
-{"username":["Ushbu maydon to'ldirilishi shart."]}
+{ "username": ["Ushbu maydon to'ldirilishi shart."] }
 ```
 
 > DRF'da `PUT` majburiy bo'lmagan, lekin yuborilmagan maydonni tozalamaydi: u eski qiymatida qoladi. Maydonni tozalash uchun uni aniq yuboring, masalan `"email":""`.
@@ -1584,12 +1590,12 @@ Haqiqiy `PUT` javobi, `username` yuborilmaganda (`400`):
 
 `DELETE` foydalanuvchini bazadan o'chirmaydi, faqat `is_active=False` qiladi (`SoftDeleteUserMixin`).
 
-| Sabab | Tushuntirish |
-| --- | --- |
-| Bronlar | `Reservation.customer` `PROTECT`: broni bor foydalanuvchini o'chirib bo'lmaydi |
+| Sabab       | Tushuntirish                                                                                                                          |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Bronlar     | `Reservation.customer` `PROTECT`: broni bor foydalanuvchini o'chirib bo'lmaydi                                                        |
 | Buyurtmalar | `Order.customer` va `Order.waiter` `SET_NULL`: haqiqiy o'chirishda kim buyurtma berganini va kim xizmat qilganini yo'qotgan bo'lardik |
-| Hisobotlar | To'lov va holat tarixi to'liq qoladi |
-| Qaytarish | Xato bilan o'chirilgan hisobni `/admin/` da qayta faollashtirish mumkin |
+| Hisobotlar  | To'lov va holat tarixi to'liq qoladi                                                                                                  |
+| Qaytarish   | Xato bilan o'chirilgan hisobni `/admin/` da qayta faollashtirish mumkin                                                               |
 
 `DELETE` dan keyin: login ishlamaydi, refresh tokenlar bekor qilinadi, access token ham rad etiladi. `username` va `email` band bo'lib qoladi. Superuser'ni o'chirib bo'lmaydi (400).
 
@@ -1597,10 +1603,10 @@ Haqiqiy `PUT` javobi, `username` yuborilmaganda (`400`):
 
 DRF ruxsatni ikki bosqichda tekshiradi:
 
-| Metod | Qachon ishlaydi | Nimani biladi | Misol |
-| --- | --- | --- | --- |
-| `has_permission(request, view)` | Har so'rovda, view boshlanishida | Faqat so'rovni, yozuvni emas | `IsAuthenticated`: login qilinganmi? |
-| `has_object_permission(request, view, obj)` | `get_object()` chaqirilganda | Aniq yozuvni ham | `IsOwnerOrAdmin`: bu yozuv senikimi? |
+| Metod                                       | Qachon ishlaydi                  | Nimani biladi                | Misol                                |
+| ------------------------------------------- | -------------------------------- | ---------------------------- | ------------------------------------ |
+| `has_permission(request, view)`             | Har so'rovda, view boshlanishida | Faqat so'rovni, yozuvni emas | `IsAuthenticated`: login qilinganmi? |
+| `has_object_permission(request, view, obj)` | `get_object()` chaqirilganda     | Aniq yozuvni ham             | `IsOwnerOrAdmin`: bu yozuv senikimi? |
 
 `GET /api/users/5/` ni `bob` yuborsa:
 
@@ -1618,11 +1624,11 @@ Ikki muhim oqibat:
 
 **`IsSelfOrAdminForWrite` nega kerak:** `IsOwnerOrAdmin` ning o'zi `admin` roliga hamma narsani ruxsat etadi. Unda `admin` rolidagi oddiy foydalanuvchi superuserning `username` va `email` ini o'zgartirishi mumkin edi. Bu klass superuser hisobini yozish uchun faqat superuserga ochadi. O'qish va o'zining hisobi bilan ishlashga ta'sir qilmaydi.
 
-| Kim → kimga | Oddiy foydalanuvchi | `admin` roli | Superuser |
-| --- | --- | --- | --- |
-| O'zi | Hammasi | Hammasi | Hammasi, `DELETE` dan tashqari (400) |
-| Boshqa oddiy foydalanuvchi | 403 | Hammasi | Hammasi |
-| Boshqa superuser | 403 | Faqat o'qish, yozish 403 | O'qish va tahrirlash, `DELETE` 400 |
+| Kim → kimga                | Oddiy foydalanuvchi | `admin` roli             | Superuser                            |
+| -------------------------- | ------------------- | ------------------------ | ------------------------------------ |
+| O'zi                       | Hammasi             | Hammasi                  | Hammasi, `DELETE` dan tashqari (400) |
+| Boshqa oddiy foydalanuvchi | 403                 | Hammasi                  | Hammasi                              |
+| Boshqa superuser           | 403                 | Faqat o'qish, yozish 403 | O'qish va tahrirlash, `DELETE` 400   |
 
 ### 26.6. CMD uchun curl misollari
 
@@ -1637,13 +1643,27 @@ curl -X POST http://127.0.0.1:8000/api/auth/register/ -H "Content-Type: applicat
 ```
 
 ```json
-{"user":{"id":5,"username":"ali","email":"ali@example.com","first_name":"Ali","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":null},"access":"eyJhbGciOiJIUzI1NiIs...","refresh":"eyJhbGciOiJIUzI1NiIs..."}
+{
+	"user": {
+		"id": 5,
+		"username": "ali",
+		"email": "ali@example.com",
+		"first_name": "Ali",
+		"last_name": "Valiyev",
+		"role": "customer",
+		"is_active": true,
+		"date_joined": "2026-11-04T09:19:18.928037+05:00",
+		"last_login": null
+	},
+	"access": "eyJhbGciOiJIUzI1NiIs...",
+	"refresh": "eyJhbGciOiJIUzI1NiIs..."
+}
 ```
 
 Email band bo'lsa (`400`):
 
 ```json
-{"email":["Bu email boshqa foydalanuvchiga tegishli."]}
+{ "email": ["Bu email boshqa foydalanuvchiga tegishli."] }
 ```
 
 **Token olish** (`200`):
@@ -1653,7 +1673,7 @@ curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json
 ```
 
 ```json
-{"refresh":"eyJhbGciOiJIUzI1NiIs...","access":"eyJhbGciOiJIUzI1NiIs..."}
+{ "refresh": "eyJhbGciOiJIUzI1NiIs...", "access": "eyJhbGciOiJIUzI1NiIs..." }
 ```
 
 Keyingi buyruqlar qulay bo'lishi uchun tokenlarni o'zgaruvchiga oling (o'zingiznikini to'liq qo'ying):
@@ -1670,13 +1690,23 @@ curl http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%"
 ```
 
 ```json
-{"id":5,"username":"ali","email":"ali@example.com","first_name":"Ali","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+{
+	"id": 5,
+	"username": "ali",
+	"email": "ali@example.com",
+	"first_name": "Ali",
+	"last_name": "Valiyev",
+	"role": "customer",
+	"is_active": true,
+	"date_joined": "2026-11-04T09:19:18.928037+05:00",
+	"last_login": "2026-11-04T09:19:20.035196+05:00"
+}
 ```
 
 Tokensiz (`401`):
 
 ```json
-{"detail":"Login ma’lumotlari yuborilmagan."}
+{ "detail": "Login ma’lumotlari yuborilmagan." }
 ```
 
 Basic auth bilan ham ishlaydi (`200`, javob xuddi shunday):
@@ -1692,7 +1722,17 @@ curl -X PATCH http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACC
 ```
 
 ```json
-{"id":5,"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+{
+	"id": 5,
+	"username": "ali",
+	"email": "ali@example.com",
+	"first_name": "Alijon",
+	"last_name": "Valiyev",
+	"role": "customer",
+	"is_active": true,
+	"date_joined": "2026-11-04T09:19:18.928037+05:00",
+	"last_login": "2026-11-04T09:19:20.035196+05:00"
+}
 ```
 
 **PUT** (`200`):
@@ -1702,7 +1742,17 @@ curl -X PUT http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCES
 ```
 
 ```json
-{"id":5,"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Karimov","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+{
+	"id": 5,
+	"username": "ali",
+	"email": "ali@example.com",
+	"first_name": "Alijon",
+	"last_name": "Karimov",
+	"role": "customer",
+	"is_active": true,
+	"date_joined": "2026-11-04T09:19:18.928037+05:00",
+	"last_login": "2026-11-04T09:19:20.035196+05:00"
+}
 ```
 
 **Boshqa foydalanuvchiga urinish** (`403`):
@@ -1712,7 +1762,7 @@ curl http://127.0.0.1:8000/api/users/1/ -H "Authorization: Bearer %ACCESS%"
 ```
 
 ```json
-{"detail":"Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan."}
+{ "detail": "Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan." }
 ```
 
 **Tokenni tekshirish** (to'g'ri bo'lsa `200`, javob `{}`):
@@ -1724,7 +1774,7 @@ curl -X POST http://127.0.0.1:8000/api/token/verify/ -H "Content-Type: applicati
 Noto'g'ri token (`401`):
 
 ```json
-{"detail":"Token noto‘g‘ri.","code":"token_not_valid"}
+{ "detail": "Token noto‘g‘ri.", "code": "token_not_valid" }
 ```
 
 **Refresh** (`200`, ikkala token ham yangi, `set` bilan yangilang):
@@ -1734,13 +1784,13 @@ curl -X POST http://127.0.0.1:8000/api/token/refresh/ -H "Content-Type: applicat
 ```
 
 ```json
-{"access":"eyJhbGciOiJIUzI1NiIs...","refresh":"eyJhbGciOiJIUzI1NiIs..."}
+{ "access": "eyJhbGciOiJIUzI1NiIs...", "refresh": "eyJhbGciOiJIUzI1NiIs..." }
 ```
 
 Eski refresh token qayta yuborilsa (`401`):
 
 ```json
-{"detail":"Token bekor qilingan.","code":"token_not_valid"}
+{ "detail": "Token bekor qilingan.", "code": "token_not_valid" }
 ```
 
 **Parolni almashtirish** (`200`):
@@ -1750,19 +1800,19 @@ curl -X POST http://127.0.0.1:8000/api/auth/change-password/ -H "Authorization: 
 ```
 
 ```json
-{"detail":"Parol almashtirildi. Qaytadan login qiling."}
+{ "detail": "Parol almashtirildi. Qaytadan login qiling." }
 ```
 
 Eski parol noto'g'ri bo'lsa (`400`):
 
 ```json
-{"old_password":["Eski parol noto‘g‘ri."]}
+{ "old_password": ["Eski parol noto‘g‘ri."] }
 ```
 
 Muvaffaqiyatdan keyin barcha refresh tokenlar bekor bo'ladi (`401`, `Token bekor qilingan.`). Eski parol bilan login ham ishlamaydi (`401`):
 
 ```json
-{"detail":"Login yoki parol noto‘g‘ri, yoki hisob faol emas."}
+{ "detail": "Login yoki parol noto‘g‘ri, yoki hisob faol emas." }
 ```
 
 Yangi parol bilan qaytadan token oling va `set` bilan yangilang.
@@ -1776,13 +1826,13 @@ curl -X POST http://127.0.0.1:8000/api/auth/logout/ -H "Authorization: Bearer %A
 Noto'g'ri token (`400`):
 
 ```json
-{"refresh":["Token noto‘g‘ri yoki eskirgan."]}
+{ "refresh": ["Token noto‘g‘ri yoki eskirgan."] }
 ```
 
 Logout'dan keyin shu refresh token bilan yangi access olib bo'lmaydi (`401`, `Token bekor qilingan.`). `verify` esa bekor qilingan token uchun `401` emas, `400` qaytaradi (`simplejwt` shunday ishlaydi):
 
 ```json
-{"non_field_errors":["Token bekor qilingan."]}
+{ "non_field_errors": ["Token bekor qilingan."] }
 ```
 
 **Hisobni o'chirish** (`204`, javob tanasi bo'sh):
@@ -1794,26 +1844,26 @@ curl -X DELETE http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %AC
 Shundan keyin eski access token rad etiladi (`401`):
 
 ```json
-{"detail":"Foydalanuvchi faol emas.","code":"user_inactive"}
+{ "detail": "Foydalanuvchi faol emas.", "code": "user_inactive" }
 ```
 
 Token olish ham ishlamaydi (`401`):
 
 ```json
-{"detail":"Login yoki parol noto‘g‘ri, yoki hisob faol emas."}
+{ "detail": "Login yoki parol noto‘g‘ri, yoki hisob faol emas." }
 ```
 
 ### 26.7. So'rovlarni cheklash (throttling)
 
 Cheklovdan oshilganda **429** qaytadi va `Retry-After` sarlavhasi necha soniya kutish kerakligini aytadi.
 
-| Qayerda | Doira (`scope`) | Chegara | Nimaga qarab sanaladi |
-| --- | --- | --- | --- |
-| Anonim foydalanuvchining qolgan so'rovlari | `anon` | 100/soat | IP |
-| Login qilgan foydalanuvchining qolgan so'rovlari | `user` | 1000/soat | Foydalanuvchi |
-| `POST /api/token/` va xato Basic parol | `login` | 5/daqiqa | IP |
-| `POST /api/auth/register/` | `register` | 5/daqiqa | IP |
-| `POST /api/auth/change-password/` | `change_password` | 5/daqiqa | Foydalanuvchi |
+| Qayerda                                          | Doira (`scope`)   | Chegara   | Nimaga qarab sanaladi |
+| ------------------------------------------------ | ----------------- | --------- | --------------------- |
+| Anonim foydalanuvchining qolgan so'rovlari       | `anon`            | 100/soat  | IP                    |
+| Login qilgan foydalanuvchining qolgan so'rovlari | `user`            | 1000/soat | Foydalanuvchi         |
+| `POST /api/token/` va xato Basic parol           | `login`           | 5/daqiqa  | IP                    |
+| `POST /api/auth/register/`                       | `register`        | 5/daqiqa  | IP                    |
+| `POST /api/auth/change-password/`                | `change_password` | 5/daqiqa  | Foydalanuvchi         |
 
 Bir daqiqa ichidagi 6-urinishda (`429`):
 
@@ -1822,15 +1872,15 @@ curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json
 ```
 
 ```json
-{"detail":"So‘rovlar soni chegaradan oshdi. 52 soniyadan keyin urinib ko‘ring."}
+{ "detail": "So‘rovlar soni chegaradan oshdi. 52 soniyadan keyin urinib ko‘ring." }
 ```
 
 **Oddiy sozlash yetmaydigan ikki joy, ikkalasi ham test bilan tekshirilgan:**
 
-| Muammo | Sabab | Yechim |
-| --- | --- | --- |
-| `X-Forwarded-For` ni soxtalashtirib cheklovdan qutulish | `NUM_PROXIES` berilmasa, DRF IP manzilni shu sarlavhadan oladi | `NUM_PROXIES: 0`: faqat haqiqiy `REMOTE_ADDR` ishlatiladi |
-| Basic orqali parolni cheksiz tanlash | DRF autentifikatsiyani throttling'dan **oldin** bajaradi: xato parol 401 bilan to'xtaydi va sanalmaydi | `ThrottledBasicAuthentication` xato urinishlarni `login` hisobiga yozadi. To'g'ri parol bilan ishlaydigan mijoz sanalmaydi |
+| Muammo                                                  | Sabab                                                                                                  | Yechim                                                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `X-Forwarded-For` ni soxtalashtirib cheklovdan qutulish | `NUM_PROXIES` berilmasa, DRF IP manzilni shu sarlavhadan oladi                                         | `NUM_PROXIES: 0`: faqat haqiqiy `REMOTE_ADDR` ishlatiladi                                                                  |
+| Basic orqali parolni cheksiz tanlash                    | DRF autentifikatsiyani throttling'dan **oldin** bajaradi: xato parol 401 bilan to'xtaydi va sanalmaydi | `ThrottledBasicAuthentication` xato urinishlarni `login` hisobiga yozadi. To'g'ri parol bilan ishlaydigan mijoz sanalmaydi |
 
 **Serverga chiqishda:**
 
@@ -1844,19 +1894,234 @@ curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json
 
 `simplejwt` da o'zbekcha tarjima yo'q, DRF'da esa autentifikatsiya xabarlari tarjima qilinmagan. `api/exceptions.py` dagi `uzbek_exception_handler` DRF'ning standart handleridan keyin javobni ko'rib chiqadi va ma'lum matnlarni almashtiradi:
 
-| Inglizcha | O'zbekcha |
-| --- | --- |
-| `Token is blacklisted` | Token bekor qilingan. |
-| `Token is invalid` | Token noto'g'ri. |
-| `Token is expired` | Token muddati o'tgan. |
-| `Token is invalid or expired` | Token noto'g'ri yoki muddati o'tgan. |
-| `No active account found with the given credentials` | Login yoki parol noto'g'ri, yoki hisob faol emas. |
-| `Authentication credentials were not provided.` | Login ma'lumotlari yuborilmagan. |
-| `User is inactive` | Foydalanuvchi faol emas. |
-| `Request was throttled...` | So'rovlar soni chegaradan oshdi. N soniyadan keyin urinib ko'ring. |
+| Inglizcha                                            | O'zbekcha                                                          |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `Token is blacklisted`                               | Token bekor qilingan.                                              |
+| `Token is invalid`                                   | Token noto'g'ri.                                                   |
+| `Token is expired`                                   | Token muddati o'tgan.                                              |
+| `Token is invalid or expired`                        | Token noto'g'ri yoki muddati o'tgan.                               |
+| `No active account found with the given credentials` | Login yoki parol noto'g'ri, yoki hisob faol emas.                  |
+| `Authentication credentials were not provided.`      | Login ma'lumotlari yuborilmagan.                                   |
+| `User is inactive`                                   | Foydalanuvchi faol emas.                                           |
+| `Request was throttled...`                           | So'rovlar soni chegaradan oshdi. N soniyadan keyin urinib ko'ring. |
 
 To'liq ro'yxat: `TRANSLATIONS` lug'ati.
 
 - **`code` o'zgarmaydi** (`token_not_valid`, `user_inactive`). Frontend xabar matniga emas, shu kodga qarab ishlashi kerak.
 - Javob tuzilishi saqlanadi, ichki `messages` ro'yxati ham tarjima qilinadi.
 - `simplejwt` yangilanganda matnlari o'zgarsa, tarjima qilinmagan xabar inglizcha chiqadi, lekin xato bermaydi.
+
+---
+
+## 27. Mahsulotlar API
+
+Mahsulotlarni ro'yxatdan o'tmaganlar ham ko'ra oladi, tafsilot va qo'shish uchun login kerak, tahrirlashni esa faqat egasi yoki admin qiladi. Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
+
+### 27.1. Model maydonlari
+
+| Maydon | Turi | Cheklov | Izoh |
+| --- | --- | --- | --- |
+| `id` | Avtomatik | Faqat o'qish | |
+| `name` | `CharField(200)` | Majburiy, bo'sh bo'lmasin | Nomi |
+| `description` | `TextField` | Ixtiyoriy | Tavsif |
+| `price` | `DecimalField(12, 2)` | Majburiy, `>= 0` | Narxi, so'mda. `0` ruxsat etiladi |
+| `quantity` | `PositiveIntegerField` | `>= 0`, standart `0` | Soni |
+| `image` | `ImageField` | Ixtiyoriy, 3 MB gacha, JPEG, PNG yoki WebP | `media/products/` ga saqlanadi. Fayl mazmuni tekshiriladi |
+| `created_by` | FK `User`, `PROTECT` | Faqat o'qish | Serverda `request.user` dan qo'yiladi. Javobda `username` chiqadi |
+| `created_at`, `updated_at` | `DateTimeField` | Faqat o'qish | Avtomatik |
+
+Standart tartib: eng yangisi birinchi. `PROTECT` sababli mahsuloti bor foydalanuvchini bazadan o'chirib bo'lmaydi; API dagi soft delete (26.4-bo'lim) esa unga ta'sir qilmaydi, mahsulot va uning egasi qoladi.
+
+### 27.2. Ruxsatlar
+
+| Amal | Metod | URL | Kim | Javob | Xatolar |
+| --- | --- | --- | --- | --- | --- |
+| Ro'yxat | GET | `/api/products/` | Hamma, anonim ham | 200 | 429 |
+| Tafsilot | GET | `/api/products/{id}/` | Login qilganlar | 200 | 401, 404 |
+| Qo'shish | POST | `/api/products/` | Login qilganlar | 201 | 400, 401 |
+| To'liq tahrirlash | PUT | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
+| Qisman tahrirlash | PATCH | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
+| O'chirish | DELETE | `/api/products/{id}/` | Egasi yoki admin | 204 | 401, 403, 404 |
+
+Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
+
+Ro'yxat parametrlari:
+
+| Parametr | Misol | Vazifasi |
+| --- | --- | --- |
+| `search` | `?search=choy` | `name` va `description` bo'yicha qidirish |
+| `ordering` | `?ordering=-price` | `price`, `created_at`, `name` bo'yicha saralash |
+| `created_by` | `?created_by=4` | Yaratgan foydalanuvchi **id** si bo'yicha filtr (javobda `username` chiqsa ham) |
+| `page` | `?page=2` | Sahifa, har birida 10 ta |
+
+### 27.3. Nima uchun ikki xil serializer
+
+| | `ProductListSerializer` | `ProductDetailSerializer` |
+| --- | --- | --- |
+| Qachon | `list` | `retrieve`, `create`, `update`, `partial_update` |
+| Maydonlar | `id`, `name`, `price`, `image` | Hammasi |
+| Kim ko'radi | Hamma, anonim ham | Login qilganlar |
+
+Ikki sabab bor:
+
+1. **Maxfiylik.** Ro'yxat ochiq, tafsilot esa yopiq. Bitta serializer bo'lsa, anonim foydalanuvchi `quantity`, `description` va egasini ro'yxatning o'zidan bilib olardi va `401` qoidasi ma'nosiz bo'lib qolardi.
+2. **Tezlik.** Katalog sahifasiga faqat nom, narx va rasm kerak. Javob kichikroq bo'ladi.
+
+Tanlovni `get_serializer_class` qiladi:
+
+```python
+def get_serializer_class(self):
+    return ProductListSerializer if self.action == 'list' else ProductDetailSerializer
+```
+
+### 27.4. `get_permissions` qanday ishlaydi
+
+`ModelViewSet` bitta klassda bir nechta amalni bajaradi. `permission_classes` hammasiga bir xil ruxsat beradi, bizga esa har amalga boshqasi kerak. DRF so'rov boshida `self.action` ni URL va metoddan aniqlaydi va `get_permissions()` ni chaqiradi:
+
+```python
+def get_permissions(self):
+    if self.action == 'list':
+        return [permissions.AllowAny()]
+    if self.action in ('update', 'partial_update', 'destroy'):
+        return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
+    return [permissions.IsAuthenticated()]
+```
+
+| So'rov | `self.action` | Ruxsatlar |
+| --- | --- | --- |
+| `GET /api/products/` | `list` | `AllowAny` |
+| `GET /api/products/5/` | `retrieve` | `IsAuthenticated` |
+| `POST /api/products/` | `create` | `IsAuthenticated` |
+| `PUT /api/products/5/` | `update` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `PATCH /api/products/5/` | `partial_update` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `DELETE /api/products/5/` | `destroy` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `OPTIONS` va boshqalar | `metadata` va h.k. | `IsAuthenticated` |
+
+- **Oxirgi qator ataylab eng qattiq emas, lekin yopiq:** keyin yangi action qo'shilib, ro'yxatga kiritish unutilsa, u tasodifan hammaga ochiq bo'lib qolmaydi.
+- **`has_permission` va `has_object_permission`:** `IsAuthenticated` so'rov boshida ishlaydi (anonim: `401`). `IsProductOwnerOrAdmin` esa `get_object()` chaqirilganda aniq mahsulot bilan ishlaydi (begona: `403`). Batafsil: 26.5-bo'lim.
+
+### 27.5. CMD uchun curl misollari
+
+Quyidagi javoblar shu buyruqlarni CMD orqali bajarib olingan. Tokenlar qisqartirilgan. `id` va vaqtlar sizda boshqacha bo'ladi.
+
+**Ro'yxat, login shart emas** (`200`):
+
+```cmd
+curl "http://127.0.0.1:8000/api/products/?search=choy&ordering=-price"
+```
+
+```json
+{"count":1,"next":null,"previous":null,"results":[{"id":2,"name":"Qora choy","price":"15000.00","image":null}]}
+```
+
+**Tafsilot, loginsiz** (`401`):
+
+```cmd
+curl http://127.0.0.1:8000/api/products/2/
+```
+
+```json
+{"detail":"Login ma’lumotlari yuborilmagan."}
+```
+
+**Token olish** (`200`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json" -d "{\"username\":\"customer1\",\"password\":\"Restoran2026!\"}"
+```
+
+```json
+{"refresh":"eyJhbGciOiJIUzI1NiIs...","access":"eyJhbGciOiJIUzI1NiIs..."}
+```
+
+```cmd
+set ACCESS=eyJhbGciOi...
+```
+
+**Qo'shish** (`201`). `created_by` da boshqa `id` yuborilgan, lekin u e'tiborsiz qoldirilib, egasi `customer1` bo'lgan:
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"name\":\"Ko'k choy\",\"description\":\"100 gramm\",\"price\":\"12000.50\",\"quantity\":10,\"created_by\":1}"
+```
+
+```json
+{"id":2,"name":"Ko'k choy","description":"100 gramm","price":"12000.50","quantity":10,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.407003+05:00"}
+```
+
+Manfiy narx (`400`):
+
+```json
+{"price":["Qiymat 0 dan kichik bo‘lmasin."]}
+```
+
+**Rasm bilan qo'shish** (`201`). Bu yerda `-F` ishlatiladi, `Content-Type` ni curl o'zi qo'yadi:
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCESS%" -F "name=Rasmli" -F "price=1000" -F "image=@rasm.png"
+```
+
+```json
+{"id":3,"name":"Rasmli","description":"","price":"1000.00","quantity":0,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T09:54:13.798214+05:00","updated_at":"2026-11-04T09:54:13.798227+05:00"}
+```
+
+GIF yoki rasm bo'lmagan fayl (`400`):
+
+```json
+{"image":["Faqat haqiqiy JPEG, PNG yoki WebP rasmini yuklang."]}
+```
+
+**Tafsilot, login bilan** (`200`):
+
+```cmd
+curl http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%"
+```
+
+```json
+{"id":2,"name":"Ko'k choy","description":"100 gramm","price":"12000.50","quantity":10,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.407003+05:00"}
+```
+
+**PUT** (`200`). `name` va `price` majburiy:
+
+```cmd
+curl -X PUT http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"name\":\"Qora choy\",\"description\":\"200 gramm\",\"price\":\"15000\",\"quantity\":5}"
+```
+
+```json
+{"id":2,"name":"Qora choy","description":"200 gramm","price":"15000.00","quantity":5,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.536807+05:00"}
+```
+
+Majburiy maydonlarsiz (`400`):
+
+```json
+{"name":["Ushbu maydon to'ldirilishi shart."],"price":["Ushbu maydon to'ldirilishi shart."]}
+```
+
+**PATCH** (`200`). Faqat yuborilgan maydon o'zgaradi:
+
+```cmd
+curl -X PATCH http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"quantity\":3}"
+```
+
+```json
+{"id":2,"name":"Qora choy","description":"200 gramm","price":"15000.00","quantity":3,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.618749+05:00"}
+```
+
+Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT`, `PATCH` va `DELETE` uchun (`403`):
+
+```json
+{"detail":"Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi."}
+```
+
+**DELETE** (`204`, javob tanasi bo'sh):
+
+```cmd
+curl -X DELETE http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%"
+```
+
+Shundan keyin tafsilot (`404`):
+
+```json
+{"detail":"Yozuv topilmadi."}
+```
+
+> Mahsulot o'chirilganda yoki rasmi almashtirilganda eski fayl `media/products/` da qoladi: Django fayllarni o'zi o'chirmaydi.

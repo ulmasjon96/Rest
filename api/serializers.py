@@ -11,7 +11,7 @@ from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
     RestaurantSettings, Table,
 )
-from .models import Book
+from .models import Book, Product
 from .permissions import get_role
 
 
@@ -61,6 +61,23 @@ class BookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = '__all__'
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    """Ochiq ro'yxat uchun qisqa ko'rinish."""
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'price', 'image']
+
+
+class ProductDetailSerializer(serializers.ModelSerializer):
+    # id o'rniga username: yaratgan foydalanuvchi serverda request.user dan qo'yiladi.
+    created_by = serializers.SlugRelatedField(slug_field='username', read_only=True)
+
+    class Meta:
+        model = Product
+        fields = ['id', 'name', 'description', 'price', 'quantity', 'image', 'created_by', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
 
 
 class UserSerializer(serializers.ModelSerializer):

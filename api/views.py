@@ -21,16 +21,16 @@ from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
     RestaurantSettings, Table,
 )
-from .models import Book
+from .models import Book, Product
 from .permissions import (
-    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, IsOwnerOrAdmin, IsSelfOrAdminForWrite, OrderPermission,
-    ReservationPermission, get_role,
+    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, IsOwnerOrAdmin, IsProductOwnerOrAdmin, IsSelfOrAdminForWrite,
+    OrderPermission, ReservationPermission, get_role,
 )
 from .serializers import (
     AuthResponseSerializer, BookSerializer, CategorySerializer, ChangePasswordSerializer, DailyReportQuerySerializer,
     DailyReportSerializer, DetailSerializer, LogoutSerializer, MenuCategorySerializer, MenuItemSerializer,
-    OrderSerializer, OrderStatusEventSerializer, OrderStatusSerializer, ProfileSerializer, RegisterSerializer,
-    ReservationSerializer, RestaurantSettingsSerializer, TableAvailabilityQuerySerializer, TableSerializer,
+    OrderSerializer, OrderStatusEventSerializer, OrderStatusSerializer, ProductDetailSerializer, ProductListSerializer,
+    ProfileSerializer, RegisterSerializer, ReservationSerializer, RestaurantSettingsSerializer, TableAvailabilityQuerySerializer, TableSerializer,
     UserSerializer, blacklist_user_tokens,
 )
 
@@ -60,6 +60,36 @@ class BookViewSet(viewsets.ModelViewSet):
     filterset_fields = ['author']
     search_fields = ['title', 'author']
     ordering_fields = ['price', 'created_at']
+
+
+@extend_schema_view(
+    list=extend_schema(summary='Mahsulotlar ro‘yxati (hamma uchun ochiq)', tags=['products']),
+    retrieve=extend_schema(summary='Mahsulot tafsiloti (login qilganlar)', tags=['products']),
+    create=extend_schema(summary='Mahsulot qo‘shish (login qilganlar)', tags=['products']),
+    update=extend_schema(summary='Mahsulotni to‘liq tahrirlash (egasi yoki admin)', tags=['products']),
+    partial_update=extend_schema(summary='Mahsulotni qisman tahrirlash (egasi yoki admin)', tags=['products']),
+    destroy=extend_schema(summary='Mahsulotni o‘chirish (egasi yoki admin)', tags=['products']),
+)
+class ProductViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
+    # '-id': bir vaqtda yaratilganlar ham sahifalarda barqaror tartibda chiqadi.
+    queryset = Product.objects.select_related('created_by').order_by('-created_at', '-id')
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at', 'name']
+    filterset_fields = ['created_by']
+
+    def get_permissions(self):
+        if self.action == 'list':
+            return [permissions.AllowAny()]
+        if self.action in ('update', 'partial_update', 'destroy'):
+            return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
+        # retrieve, create va boshqa har qanday amal (OPTIONS ham): yangi action tasodifan ochiq qolmaydi.
+        return [permissions.IsAuthenticated()]
+
+    def get_serializer_class(self):
+        return ProductListSerializer if self.action == 'list' else ProductDetailSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
 
 
 # ---------- Foydalanuvchilar va JWT ----------
