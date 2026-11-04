@@ -83,9 +83,17 @@ class ProductViewSet(
     ordering_fields = ['price', 'created_at', 'name']
     filterset_fields = ['created_by']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        if self.action in ('list', 'retrieve'):
+            queryset = queryset.filter(is_active=True)
+        return queryset
+
     def get_permissions(self):
         if self.action == 'list':
             return [permissions.AllowAny()]
+        if self.action in ('hide', 'unhide'):
+            return [permissions.IsAuthenticated(), IsAdminRole()]
         if self.action in ('update', 'partial_update'):
             return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
         # retrieve, create va boshqa har qanday amal (OPTIONS ham): yangi action tasodifan ochiq qolmaydi.
@@ -96,6 +104,24 @@ class ProductViewSet(
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    @extend_schema(summary='Mahsulotni yashirish (admin)', tags=['products'])
+    def hide(self, request, *args, **kwargs):
+        product = self.get_object()
+        if product.is_active:
+            product.is_active = False
+            product.save(update_fields=['is_active', 'updated_at'])
+        return Response(self.get_serializer(product).data)
+
+    @action(detail=True, methods=['post'])
+    @extend_schema(summary='Mahsulotni qayta ko‘rsatish (admin)', tags=['products'])
+    def unhide(self, request, *args, **kwargs):
+        product = self.get_object()
+        if not product.is_active:
+            product.is_active = True
+            product.save(update_fields=['is_active', 'updated_at'])
+        return Response(self.get_serializer(product).data)
 
 
 @extend_schema_view(

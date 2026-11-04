@@ -11,9 +11,10 @@ class BookAdmin(admin.ModelAdmin):
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['name', 'price', 'quantity', 'created_by', 'created_at']
+    list_display = ['name', 'price', 'quantity', 'is_active', 'created_by', 'created_at']
+    list_editable = ['is_active']
     search_fields = ['name', 'description', 'created_by__username']
-    list_filter = ['created_at', 'created_by']
+    list_filter = ['is_active', 'created_at', 'created_by']
     readonly_fields = ['created_by', 'created_at', 'updated_at']
 
     def save_model(self, request, obj, form, change):

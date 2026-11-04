@@ -24,6 +24,7 @@ class Product(models.Model):
     price = models.DecimalField(_('Narxi (so‘m)'), max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
     quantity = models.PositiveIntegerField(_('Soni'), default=0)
     image = models.ImageField(_('Rasm'), upload_to='products/', blank=True, validators=[validate_image])
+    is_active = models.BooleanField(_('Faol'), default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT,
         related_name='products', verbose_name=_('Yaratgan'),

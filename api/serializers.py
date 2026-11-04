@@ -9,7 +9,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 
 from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
-    RestaurantSettings, Table,
+    RestaurantSettings, Table, validate_image,
 )
 from .models import Book, Product
 from .permissions import get_role
@@ -73,11 +73,34 @@ class ProductListSerializer(serializers.ModelSerializer):
 class ProductDetailSerializer(serializers.ModelSerializer):
     # id o'rniga username: yaratgan foydalanuvchi serverda request.user dan qo'yiladi.
     created_by = serializers.SlugRelatedField(slug_field='username', read_only=True)
+    image = serializers.ImageField(required=False, allow_null=True, validators=[validate_image])
 
     class Meta:
         model = Product
-        fields = ['id', 'name', 'description', 'price', 'quantity', 'image', 'created_by', 'created_at', 'updated_at']
+        fields = ['id', 'name', 'description', 'price', 'quantity', 'image', 'is_active', 'created_by', 'created_at', 'updated_at']
         read_only_fields = ['created_at', 'updated_at']
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        if request is None or get_role(request.user) != Profile.ADMIN:
+            fields['is_active'].read_only = True
+        return fields
+
+    def update(self, instance, validated_data):
+        image_was_sent = 'image' in validated_data
+        old_image = instance.image
+        if image_was_sent and validated_data['image'] is None:
+            # ImageField blank=True bo'lgani uchun DBda rasm yo'qligi bo'sh satr bilan saqlanadi.
+            validated_data['image'] = ''
+
+        instance = super().update(instance, validated_data)
+        if image_was_sent and old_image and old_image.name:
+            new_name = instance.image.name if instance.image else ''
+            if old_image.name != new_name:
+                storage, old_name = old_image.storage, old_image.name
+                transaction.on_commit(lambda: storage.delete(old_name), robust=True)
+        return instance
 
 
 class UserSerializer(serializers.ModelSerializer):

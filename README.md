@@ -1919,7 +1919,7 @@ To'liq ro'yxat: `TRANSLATIONS` lug'ati.
 
 ## 27. Mahsulotlar API
 
-Mahsulotlarni ro'yxatdan o'tmaganlar ham ko'ra oladi, tafsilot va qo'shish uchun login kerak, tahrirlashni egasi yoki admin qiladi. O'chirishni esa **faqat egasi, o'z profili orqali** qiladi (27.6-bo'lim). Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
+Mahsulotlar ro'yxati ochiq, tafsilot va qo'shish uchun login kerak, tahrirlashni egasi yoki admin qiladi. O'chirishni **faqat yaratuvchisi, o'z profili orqali** qiladi (27.6-bo'lim). Admin va superuser mahsulotni o'chirmasdan yashirishi yoki qayta ko'rsatishi mumkin. Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
 
 ### 27.1. Model maydonlari
 
@@ -1931,6 +1931,7 @@ Mahsulotlarni ro'yxatdan o'tmaganlar ham ko'ra oladi, tafsilot va qo'shish uchun
 | `price`                    | `DecimalField(12, 2)`  | Majburiy, `>= 0`                           | Narxi, so'mda. `0` ruxsat etiladi                                 |
 | `quantity`                 | `PositiveIntegerField` | `>= 0`, standart `0`                       | Soni                                                              |
 | `image`                    | `ImageField`           | Ixtiyoriy, 3 MB gacha, JPEG, PNG yoki WebP | `media/products/` ga saqlanadi. Fayl mazmuni tekshiriladi         |
+| `is_active`                | `BooleanField`         | Standart `True`                            | `False` bo'lsa ochiq katalog va tafsilotdan yashiriladi            |
 | `created_by`               | FK `User`, `PROTECT`   | Faqat o'qish                               | Serverda `request.user` dan qo'yiladi. Javobda `username` chiqadi |
 | `created_at`, `updated_at` | `DateTimeField`        | Faqat o'qish                               | Avtomatik                                                         |
 
@@ -1938,16 +1939,18 @@ Standart tartib: eng yangisi birinchi. `PROTECT` sababli mahsuloti bor foydalanu
 
 ### 27.2. Ruxsatlar
 
-| Amal              | Metod  | URL                   | Kim               | Javob | Xatolar            |
-| ----------------- | ------ | --------------------- | ----------------- | ----- | ------------------ |
-| Ro'yxat           | GET    | `/api/products/`      | Hamma, anonim ham | 200   | 429                |
-| Tafsilot          | GET    | `/api/products/{id}/` | Login qilganlar   | 200   | 401, 404           |
-| Qo'shish          | POST   | `/api/products/`      | Login qilganlar   | 201   | 400, 401           |
-| To'liq tahrirlash | PUT    | `/api/products/{id}/` | Egasi yoki admin  | 200   | 400, 401, 403, 404 |
-| Qisman tahrirlash | PATCH  | `/api/products/{id}/` | Egasi yoki admin  | 200   | 400, 401, 403, 404 |
-| O'chirish | DELETE | `/api/products/{id}/` | Hech kim: profil orqali (27.6-bo'lim) | 405 | 401 |
+| Amal              | Metod | URL | Kim | Javob | Xatolar |
+| ----------------- | ----- | --- | --- | ----- | ------- |
+| Ro'yxat | GET | `/api/products/` | Hamma, faqat faol mahsulotlar | 200 | 429 |
+| Tafsilot | GET | `/api/products/{id}/` | Login qilganlar, faqat faol mahsulot | 200 | 401, 404 |
+| Qo'shish | POST | `/api/products/` | Login qilganlar | 201 | 400, 401 |
+| To'liq tahrirlash | PUT | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
+| Qisman tahrirlash | PATCH | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
+| Yashirish | POST | `/api/products/{id}/hide/` | Admin roli yoki superuser | 200 | 401, 403, 404 |
+| Qayta ko'rsatish | POST | `/api/products/{id}/unhide/` | Admin roli yoki superuser | 200 | 401, 403, 404 |
+| O'chirish | DELETE | `/api/products/{id}/` | Ulanmagan; profil orqali (27.6-bo'lim) | 405 | Anonimga 401 |
 
-Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin boshqaning mahsulotini o'chira olmaydi. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
+Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin boshqaning mahsulotini o'chira olmaydi; admin o'zi yaratgan mahsulotni esa o'z profilidan o'chiradi. Admin yoki superuser `is_active` ni boshqaradi, oddiy foydalanuvchi uchun bu maydon read-only. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
 
 Ro'yxat parametrlari:
 
@@ -1960,11 +1963,11 @@ Ro'yxat parametrlari:
 
 ### 27.3. Nima uchun ikki xil serializer
 
-|             | `ProductListSerializer`        | `ProductDetailSerializer`                        |
-| ----------- | ------------------------------ | ------------------------------------------------ |
-| Qachon      | `list`                         | `retrieve`, `create`, `update`, `partial_update` |
-| Maydonlar   | `id`, `name`, `price`, `image` | Hammasi                                          |
-| Kim ko'radi | Hamma, anonim ham              | Login qilganlar                                  |
+|             | `ProductListSerializer`        | `ProductDetailSerializer`                                      |
+| ----------- | ------------------------------ | -------------------------------------------------------------- |
+| Qachon      | `list`                         | `retrieve`, `create`, `update`, `partial_update`, hide/unhide   |
+| Maydonlar   | `id`, `name`, `price`, `image` | Hammasi, shu jumladan `is_active`                              |
+| Kim ko'radi | Hamma, faol mahsulotlar        | Login qilganlar; yashirinini egasi profilidagi endpointda ko'radi |
 
 Ikki sabab bor:
 
@@ -1986,6 +1989,8 @@ def get_serializer_class(self):
 def get_permissions(self):
     if self.action == 'list':
         return [permissions.AllowAny()]
+    if self.action in ('hide', 'unhide'):
+        return [permissions.IsAuthenticated(), IsAdminRole()]
     if self.action in ('update', 'partial_update'):
         return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
     return [permissions.IsAuthenticated()]
@@ -1998,11 +2003,14 @@ def get_permissions(self):
 | `POST /api/products/`     | `create`           | `IsAuthenticated`                           |
 | `PUT /api/products/5/`    | `update`           | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
 | `PATCH /api/products/5/`  | `partial_update`   | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `POST /api/products/5/hide/` | `hide`          | `IsAuthenticated` + admin roli yoki superuser |
+| `POST /api/products/5/unhide/` | `unhide`      | `IsAuthenticated` + admin roli yoki superuser |
 | `DELETE /api/products/5/` | `None` (ulanmagan) | `IsAuthenticated`, keyin 405 |
 | `OPTIONS` va boshqalar    | `metadata` va h.k. | `IsAuthenticated`                           |
 
 - **Oxirgi qator ataylab eng qattiq emas, lekin yopiq:** keyin yangi action qo'shilib, ro'yxatga kiritish unutilsa, u tasodifan hammaga ochiq bo'lib qolmaydi.
 - **`has_permission` va `has_object_permission`:** `IsAuthenticated` so'rov boshida ishlaydi (anonim: `401`). `IsProductOwnerOrAdmin` esa `get_object()` chaqirilganda aniq mahsulot bilan ishlaydi (begona: `403`). Batafsil: 26.5-bo'lim.
+- Ochiq `list` va `retrieve` queryset'i `is_active=True` bilan cheklanadi. `hide`/`unhide` actionlari yashirin yozuvni ham ID orqali topishi uchun umumiy querysetni ishlatadi.
 
 ### 27.5. CMD uchun curl misollari
 
@@ -2061,6 +2069,7 @@ curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCE
 	"price": "12000.50",
 	"quantity": 10,
 	"image": null,
+	"is_active": true,
 	"created_by": "customer1",
 	"created_at": "2026-11-04T09:54:13.406985+05:00",
 	"updated_at": "2026-11-04T09:54:13.407003+05:00"
@@ -2087,6 +2096,7 @@ curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCE
 	"price": "1000.00",
 	"quantity": 0,
 	"image": "http://127.0.0.1:8000/media/products/rasm.png",
+	"is_active": true,
 	"created_by": "customer1",
 	"created_at": "2026-11-04T09:54:13.798214+05:00",
 	"updated_at": "2026-11-04T09:54:13.798227+05:00"
@@ -2113,6 +2123,7 @@ curl http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%"
 	"price": "12000.50",
 	"quantity": 10,
 	"image": null,
+	"is_active": true,
 	"created_by": "customer1",
 	"created_at": "2026-11-04T09:54:13.406985+05:00",
 	"updated_at": "2026-11-04T09:54:13.407003+05:00"
@@ -2133,6 +2144,7 @@ curl -X PUT http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACC
 	"price": "15000.00",
 	"quantity": 5,
 	"image": null,
+	"is_active": true,
 	"created_by": "customer1",
 	"created_at": "2026-11-04T09:54:13.406985+05:00",
 	"updated_at": "2026-11-04T09:54:13.536807+05:00"
@@ -2159,6 +2171,7 @@ curl -X PATCH http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %A
 	"price": "15000.00",
 	"quantity": 3,
 	"image": null,
+	"is_active": true,
 	"created_by": "customer1",
 	"created_at": "2026-11-04T09:54:13.406985+05:00",
 	"updated_at": "2026-11-04T09:54:13.618749+05:00"
@@ -2183,12 +2196,14 @@ Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT` va `PATCH` uchun (`403`):
 
 Admin yoki superuserning o'zi qo'shgan mahsulot bo'lsa, ular ham uni o'z profilidan o'chiradi (204): bu yerda hal qiluvchi narsa rol emas, egalik.
 
+`POST /api/products/{id}/hide/` va `/unhide/` faqat `admin` roli yoki superuserga ruxsat etiladi. Bu amallar mahsulotni bazadan o'chirmaydi: `is_active=False` katalog va umumiy detail'dan yashiradi, `is_active=True` esa qayta ko'rsatadi. Yashirilgan mahsulot egasining `/api/users/me/products/` ro'yxatida `is_active` qiymati bilan qoladi. Oddiy foydalanuvchi `is_active` maydonini PUT/PATCH bilan o'zgartira olmaydi.
+
 **Endpointlar** (`MyProductViewSet`, hammasi `IsAuthenticated`):
 
 | Metod | URL | Vazifasi | Javob | Xatolar |
 | --- | --- | --- | --- | --- |
-| GET | `/api/users/me/products/` | O'z mahsulotlari, to'liq maydonlar. `?search=`, `?ordering=`, `?page=` | 200 | 401 |
-| GET | `/api/users/me/products/{id}/` | O'z mahsuloti | 200 | 401, 404 |
+| GET | `/api/users/me/products/` | O'z faol va yashirin mahsulotlari, `is_active` bilan. `?search=`, `?ordering=`, `?page=` | 200 | 401 |
+| GET | `/api/users/me/products/{id}/` | O'z mahsuloti, faol yoki yashirin | 200 | 401, 404 |
 | DELETE | `/api/users/me/products/{id}/` | O'z mahsulotini va uning rasm faylini o'chiradi | 204 | 400, 401, 404 |
 
 **Nima uchun 403 emas, 404:**
@@ -2199,11 +2214,11 @@ Admin yoki superuserning o'zi qo'shgan mahsulot bo'lsa, ular ham uni o'z profili
 
 **Nima uchun umumiy manzilda 405, anonimga esa 401:** `ProductViewSet` da `DestroyModelMixin` yo'q, shuning uchun `DELETE` ulanmagan. DRF esa avval autentifikatsiyani, keyin metodni tekshiradi: anonim birinchi tekshiruvda to'xtaydi (401), login qilgan foydalanuvchi ikkinchisida (405).
 
-**Rasm fayli:** `api/models.py` dagi `post_delete` signali faylni `transaction.on_commit` ichida o'chiradi. Baza o'zgarishi bekor qilinsa, fayl joyida qoladi. Fayl o'chmasa (masalan, band bo'lsa), xato logga yoziladi va foydalanuvchi 500 olmaydi. Rasmi almashtirilganda eski fayl hali ham diskda qoladi: signal faqat mahsulot o'chganda ishlaydi.
+**Rasm fayli:** `api/models.py` dagi `post_delete` signali mahsulot o'chganda rasmni `transaction.on_commit` ichida o'chiradi. PUT/PATCH bilan rasm almashtirilsa, eski fayl tranzaksiya muvaffaqiyatli yakunlangach tozalanadi; `PATCH {"image": null}` rasmni olib tashlaydi va eski faylni ham o'chiradi. Baza o'zgarishi bekor qilinsa, eski fayl joyida qoladi.
 
 **Admin panel:** `ProductAdmin.has_delete_permission` har doim `False`. O'chirish sahifasi 403 qaytaradi, Django esa `delete_selected` amalini shu huquqqa qarab ro'yxatdan o'zi olib tashlaydi. Bu superuserga ham taalluqli.
 
-> **Oqibat:** egasi hisobini o'chirsa (26.4-bo'lim) yoki unga kira olmasa, uning mahsulotlarini API va admin panel orqali hech kim o'chira olmaydi. Ular ochiq ro'yxatda qolaveradi. Admin faqat matnini tahrirlay oladi yoki `python manage.py shell` dan foydalanadi.
+> **Oqibat:** egasi hisobini o'chirsa (26.4-bo'lim) yoki unga kira olmasa, uning mahsulotlarini API va admin panel orqali hech kim o'chira olmaydi. Mahsulot ochiq katalogda qolishi mumkin; admin uni `hide` actioni yoki admin panel orqali yashirishi mumkin.
 
 #### CMD uchun curl misollari
 
@@ -2216,7 +2231,7 @@ curl "http://127.0.0.1:8000/api/users/me/products/?search=choy&ordering=-price" 
 ```
 
 ```json
-{"count":1,"next":null,"previous":null,"results":[{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}]}
+{"count":1,"next":null,"previous":null,"results":[{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","is_active":true,"created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}]}
 ```
 
 Loginsiz (`401`):
@@ -2232,7 +2247,7 @@ curl http://127.0.0.1:8000/api/users/me/products/3/ -H "Authorization: Bearer %A
 ```
 
 ```json
-{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}
+{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","is_active":true,"created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}
 ```
 
 **O'chirish** (`204`, javob tanasi bo'sh; rasm fayli ham o'chadi):
@@ -2256,3 +2271,12 @@ curl -X DELETE http://127.0.0.1:8000/api/products/3/ -H "Authorization: Bearer %
 ```json
 {"detail":"«DELETE» metodi ruxsat etilmagan."}
 ```
+
+**Mahsulotni yashirish va qayta ko'rsatish** (faqat admin roli yoki superuser, `200`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/products/3/hide/ -H "Authorization: Bearer %ADMIN_ACCESS%"
+curl -X POST http://127.0.0.1:8000/api/products/3/unhide/ -H "Authorization: Bearer %ADMIN_ACCESS%"
+```
+
+Yashirilgan mahsulot umumiy ro'yxat va detail'da topilmaydi (`404`), ammo yaratuvchining `users/me/products/` endpointida `"is_active":false` bilan ko'rinadi.

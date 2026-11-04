@@ -1610,6 +1610,14 @@ class ProductAPITests(APITestCase):
         self.assertEqual(item['name'], 'Non')
         self.assertEqual(item['price'], '5000.00')
 
+    def test_hidden_products_are_not_in_public_list_or_detail(self):
+        hidden = Product.objects.create(name='Yashirin', price=Decimal('1'), is_active=False, created_by=self.owner)
+        self.assertNotIn('Yashirin', self.names())
+        for user, expected in ((None, status.HTTP_401_UNAUTHORIZED), (self.owner, status.HTTP_404_NOT_FOUND), (self.admin, status.HTTP_404_NOT_FOUND), (self.root, status.HTTP_404_NOT_FOUND)):
+            with self.subTest(user=getattr(user, 'username', 'anonymous')):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.get(f'{self.URL}{hidden.pk}/').status_code, expected)
+
     def test_anonymous_cannot_read_detail_or_write(self):
         self.assertEqual(self.client.get(self.detail_url).status_code, status.HTTP_401_UNAUTHORIZED)
         self.assertEqual(self.client.post(self.URL, self.valid_payload(), format='json').status_code, status.HTTP_401_UNAUTHORIZED)
@@ -1626,8 +1634,9 @@ class ProductAPITests(APITestCase):
         response = self.client.get(self.detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(set(response.data), {
-            'id', 'name', 'description', 'price', 'quantity', 'image', 'created_by', 'created_at', 'updated_at',
+            'id', 'name', 'description', 'price', 'quantity', 'image', 'is_active', 'created_by', 'created_at', 'updated_at',
         })
+        self.assertTrue(response.data['is_active'])
         self.assertEqual(response.data['created_by'], 'owner')
         self.assertEqual(response.data['quantity'], 20)
         self.assertEqual(response.data['description'], 'Tandir noni')
@@ -1701,6 +1710,13 @@ class ProductAPITests(APITestCase):
         self.assertEqual(self.product.quantity, 7)
         self.assertEqual(self.product.name, 'Non')
 
+    def test_regular_user_cannot_change_is_active(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.patch(self.detail_url, {'is_active': False}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertTrue(self.product.is_active)
+
     def test_ownership_cannot_be_transferred(self):
         self.client.force_authenticate(user=self.owner)
         response = self.client.patch(self.detail_url, {'created_by': self.other.pk}, format='json')
@@ -1731,6 +1747,37 @@ class ProductAPITests(APITestCase):
                 self.assertEqual(response.data['created_by'], 'owner')   # egasi o'zgarmaydi
                 product.refresh_from_db()
                 self.assertEqual(product.name, 'Admin tahriri')
+
+    def test_admin_role_and_superuser_can_hide_and_unhide(self):
+        for user in (self.admin, self.root):
+            with self.subTest(user=user.username):
+                product = Product.objects.create(name='Yashiriladigan', price=Decimal('1'), created_by=self.owner)
+                self.client.force_authenticate(user=user)
+                response = self.client.post(f'{self.URL}{product.pk}/hide/')
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                product.refresh_from_db()
+                self.assertFalse(product.is_active)
+                self.assertEqual(self.client.get(f'{self.URL}{product.pk}/').status_code, status.HTTP_404_NOT_FOUND)
+
+                response = self.client.post(f'{self.URL}{product.pk}/unhide/')
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                product.refresh_from_db()
+                self.assertTrue(product.is_active)
+
+    def test_only_admin_and_superuser_can_hide_or_unhide(self):
+        for user, expected in ((self.owner, status.HTTP_403_FORBIDDEN), (self.other, status.HTTP_403_FORBIDDEN), (None, status.HTTP_401_UNAUTHORIZED)):
+            with self.subTest(user=getattr(user, 'username', 'anonymous')):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.post(f'{self.detail_url}hide/').status_code, expected)
+                self.assertEqual(self.client.post(f'{self.detail_url}unhide/').status_code, expected)
+        self.assertTrue(self.product.is_active)
+
+    def test_admin_can_set_is_active_directly(self):
+        self.client.force_authenticate(user=self.admin)
+        response = self.client.patch(self.detail_url, {'is_active': False}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.is_active)
 
     # --- Validatsiya ---
 
@@ -1861,10 +1908,10 @@ class MyProductTests(APITestCase):
     def names(self, **params):
         return [p['name'] for p in self.client.get(self.URL, params).data['results']]
 
-    def image_upload(self):
+    def image_upload(self, name='a.png'):
         buffer = io.BytesIO()
         Image.new('RGB', (2, 2)).save(buffer, format='PNG')
-        return SimpleUploadedFile('a.png', buffer.getvalue(), 'image/png')
+        return SimpleUploadedFile(name, buffer.getvalue(), 'image/png')
 
     def test_anonymous_rejected(self):
         self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_401_UNAUTHORIZED)
@@ -1880,6 +1927,16 @@ class MyProductTests(APITestCase):
         self.assertEqual({p['name'] for p in response.data['results']}, {'Asal', 'Zira'})
         self.assertIn('quantity', response.data['results'][0])
         self.assertEqual(response.data['results'][0]['created_by'], 'owner')
+
+    def test_owner_list_includes_hidden_products_and_is_active(self):
+        self.mine2.is_active = False
+        self.mine2.save(update_fields=['is_active'])
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(self.URL)
+        self.assertEqual(response.data['count'], 2)
+        by_name = {item['name']: item for item in response.data['results']}
+        self.assertTrue(by_name['Asal']['is_active'])
+        self.assertFalse(by_name['Zira']['is_active'])
 
     def test_admin_list_is_also_only_own(self):
         for user in (self.admin, self.root):
@@ -1933,6 +1990,12 @@ class MyProductTests(APITestCase):
         self.client.force_authenticate(user=self.root)
         self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_204_NO_CONTENT)
 
+    def test_admin_role_deletes_only_own_product(self):
+        product = Product.objects.create(name='Adminniki', price=Decimal('1'), created_by=self.admin)
+        self.client.force_authenticate(user=self.admin)
+        self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(self.client.delete(self.url(self.foreign)).status_code, status.HTTP_404_NOT_FOUND)
+
     def test_no_write_methods(self):
         self.client.force_authenticate(user=self.owner)
         self.assertEqual(self.client.post(self.URL, {'name': 'X', 'price': '1'}, format='json').status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
@@ -1958,6 +2021,49 @@ class MyProductTests(APITestCase):
             with self.captureOnCommitCallbacks(execute=True):
                 self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_204_NO_CONTENT)
             self.assertFalse(os.path.exists(path))
+
+    def test_replacing_image_deletes_old_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            created = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload('old.png')}, format='multipart')
+            product = Product.objects.get(pk=created.data['id'])
+            old_path = product.image.path
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.patch(f'/api/products/{product.pk}/', {'image': self.image_upload('new.png')}, format='multipart')
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            self.assertFalse(os.path.exists(old_path))
+            product.refresh_from_db()
+            new_path = product.image.path
+            self.assertTrue(os.path.exists(new_path))
+            self.assertNotEqual(old_path, new_path)
+
+    def test_put_replacing_image_deletes_old_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            created = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload('old.png')}, format='multipart')
+            product = Product.objects.get(pk=created.data['id'])
+            old_path = product.image.path
+            payload = {'name': 'Rasmli', 'description': '', 'price': '1', 'quantity': 0, 'image': self.image_upload('put-new.png')}
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.put(f'/api/products/{product.pk}/', payload, format='multipart')
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            self.assertFalse(os.path.exists(old_path))
+            product.refresh_from_db()
+            self.assertTrue(os.path.exists(product.image.path))
+
+    def test_patch_null_image_removes_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            created = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload()}, format='multipart')
+            product = Product.objects.get(pk=created.data['id'])
+            old_path = product.image.path
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.patch(f'/api/products/{product.pk}/', {'image': None}, format='json')
+            self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+            self.assertIsNone(response.data['image'])
+            self.assertFalse(os.path.exists(old_path))
+            product.refresh_from_db()
+            self.assertFalse(product.image)
 
     def test_failed_attempts_keep_image_file(self):
         with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
