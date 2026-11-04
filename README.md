@@ -33,6 +33,7 @@ Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har
 23. [Namuna ma'lumot (seed)](#23-namuna-malumot-seed)
 24. [Testlarni ishga tushirish](#24-testlarni-ishga-tushirish)
 25. [Tarix: klinikadan restoranga o'tish](#25-tarix-klinikadan-restoranga-otish)
+26. [Foydalanuvchi va JWT](#26-foydalanuvchi-va-jwt)
 
 ---
 
@@ -197,6 +198,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',    # CSS, JS va rasmlar
     'rest_framework',                # DRF
     'rest_framework_simplejwt',      # JWT
+    'rest_framework_simplejwt.token_blacklist',  # bekor qilingan refresh tokenlar
     'django_filters',                # filtrlash
     'corsheaders',                   # CORS
     'drf_spectacular',               # Swagger
@@ -233,6 +235,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -250,7 +253,7 @@ REST_FRAMEWORK = {
 
 | Kalit                            | Vazifasi                                                                                                                                                                                                                                           |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_AUTHENTICATION_CLASSES` | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). |
+| `DEFAULT_AUTHENTICATION_CLASSES` | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). **BasicAuthentication** login va parolni sarlavhadan oladi (26-bo'lim). |
 | `DEFAULT_PERMISSION_CLASSES`     | Kimga nimaga ruxsat berilishi. **IsAuthenticatedOrReadOnly** bo'yicha o'qish (GET) hammaga ochiq, yozish (POST, PUT, DELETE) esa faqat login qilganlarga.                                                                                          |
 | `DEFAULT_FILTER_BACKENDS`        | **DjangoFilterBackend** maydon bo'yicha filtrlaydi (`?author=Ali`). **SearchFilter** matn bo'yicha qidiradi (`?search=python`). **OrderingFilter** saralaydi (`?ordering=-price`, minus kamayish tartibini bildiradi).                             |
 | `DEFAULT_PAGINATION_CLASS`       | Natijalarni sahifalarga bo'ladi (`?page=2`).                                                                                                                                                                                                       |
@@ -272,7 +275,7 @@ API'ga qaysi frontend manzillaridan so'rov yuborishga ruxsat berilishini belgila
 ```python
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -281,6 +284,7 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),
     path('api/token/', TokenObtainPairView.as_view()),
     path('api/token/refresh/', TokenRefreshView.as_view()),
+    path('api/token/verify/', TokenVerifyView.as_view()),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema')),
 ]
@@ -710,10 +714,10 @@ Rest/
 │   ├── admin.py             # admin panel sozlamasi
 │   ├── apps.py              # app konfiguratsiyasi
 │   ├── models.py            # Book modeli
-│   ├── permissions.py       # rollar va ruxsat klasslari
+│   ├── permissions.py       # rollar, ruxsat klasslari, IsOwnerOrAdmin
 │   ├── serializers.py       # Book va restoran serializer'lari (qo'lda yaratilgan)
 │   ├── urls.py              # router va settings/, menu/, reports/daily/
-│   ├── views.py             # BookViewSet va restoran view'lari
+│   ├── views.py             # BookViewSet, restoran va foydalanuvchi view'lari
 │   └── tests.py             # avtomatik testlar (24-bo'lim)
 ├── restaurant/              # restoran app'i (17-bo'lim)
 │   ├── management/commands/
@@ -815,6 +819,7 @@ python manage.py runserver
 - Migratsiyalar qo'llandi va `admin` superuser yaratildi.
 - 3 ta xato aniqlanib, tuzatildi.
 - Loyiha klinikadan restoranga o'tkazildi (25-bo'lim).
+- Foydalanuvchi API, JWT logout va parol almashtirish qo'shildi (26-bo'lim).
 
 **Tavsiyalar:**
 
@@ -995,6 +1000,8 @@ Rol `Profile.role` dan olinadi. `is_superuser = True` har doim **admin**. Profil
 | Holat tarixi (o'qish) | — | O'z buyurtmalari | Ko'radigan buyurtmalari | Hammasi | Hammasi |
 | Profillar, kunlik hisobot | — | — | — | — | **Hammasi** |
 | Kitoblar (`Book`) | O'qish | **Hammasi** | **Hammasi** | **Hammasi** | **Hammasi** |
+| O'z foydalanuvchi hisobi (`users/me/`) | — | **Hammasi** | **Hammasi** | **Hammasi** | **Hammasi** |
+| Boshqa foydalanuvchilar (`users/`) | — | — | — | — | **Hammasi** (26.5-bo'lim) |
 
 Avtomatik to'ldiriladigan maydonlar:
 
@@ -1014,7 +1021,10 @@ Barcha manzillar `/api/` bilan boshlanadi. Ro'yxatlar sahifalanadi (`?page=`), u
 
 | Metod | URL | Ruxsat | Vazifasi |
 | --- | --- | --- | --- |
-| POST | `token/`, `token/refresh/` | Hamma | JWT olish va yangilash |
+| POST | `token/`, `token/refresh/`, `token/verify/` | Hamma | JWT olish, yangilash va tekshirish (26-bo'lim) |
+| POST | `auth/register/`, `auth/logout/`, `auth/change-password/` | 26.2-bo'limga qarang | Ro'yxatdan o'tish, chiqish, parol |
+| GET, PUT, PATCH, DELETE | `users/me/`, `users/{id}/` | 26.2-bo'limga qarang | Foydalanuvchi hisobi |
+| GET | `users/` | admin | Foydalanuvchilar ro'yxati |
 | GET | `menu/` | Hamma | Faol kategoriyalar ichida mavjud taomlar |
 | GET | `settings/` | Hamma | Sozlamalar |
 | PUT, PATCH | `settings/` | admin | Sozlamalarni o'zgartirish |
@@ -1427,6 +1437,13 @@ Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.
 | `BookTests` | `Book` CRUD |
 | `AdminTests` | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish |
 | `SeedTests` | Seed takrorlamasligi |
+| `RegisterTests` | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol |
+| `JWTTests` | Token olish, verify, refresh, rotatsiya, Basic auth |
+| `UserMeTests` | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi |
+| `UserDetailTests` | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi |
+| `UserListTests` | Faqat admin, qidiruv va filtr |
+| `ChangePasswordTests` | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi |
+| `LogoutTests` | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi |
 
 ---
 
@@ -1441,3 +1458,324 @@ python manage.py migrate clinic zero
 Bu buyruq klinika jadvallarini o'chirdi (ularda yozuv yo'q edi). Uni `INSTALLED_APPS` dan olib tashlashdan **oldin** bajarish shart edi: keyin Django `clinic` migratsiyalarini topa olmaydi va jadvallar bazada qolib ketadi. Shundan so'ng `clinic` app'i o'chirildi va uning o'rniga `restaurant` yozildi. Klinika kodini git tarixidan ko'rish mumkin (`git show 9f70d0d`).
 
 Avvalgi bosqichdan bitta muhim saboq: git repozitoriyasi bir vaqtlar xato bilan `C:\Users\user` da ochilgan edi, u bo'sh bo'lgani uchun o'chirilib, `Rest` ichida qayta ochildi. `git add .` dan oldin `git status` ni tekshirishni unutmang: aks holda SSH kalitlari va shaxsiy fayllar repozitoriyaga tushib qolishi mumkin.
+
+---
+
+## 26. Foydalanuvchi va JWT
+
+Bu bo'lim foydalanuvchi API'si, JWT oqimi va ruxsatlarni tushuntiradi. Kod: `api/views.py`, `api/serializers.py`, `api/permissions.py`.
+
+### 26.1. JWT nima
+
+**JWT (JSON Web Token)** server `SECRET_KEY` bilan imzolagan matn. Ichida foydalanuvchi `id` si va amal qilish muddati bor. Server har so'rovda parolni tekshirmaydi, faqat imzoni tekshiradi. So'rovda u sarlavhada yuboriladi:
+
+```
+Authorization: Bearer eyJhbGciOi...
+```
+
+| | Access token | Refresh token |
+| --- | --- | --- |
+| Vazifasi | API'ga har bir so'rovda yuboriladi | Yangi access token olish uchun |
+| Muddati | 30 daqiqa | 7 kun |
+| Qayerga yuboriladi | Barcha API so'rovlariga | Faqat `/api/token/refresh/` va `/api/auth/logout/` ga |
+| Bekor qilinadimi | Yo'q, muddati tugaguncha ishlaydi | Ha, blacklist orqali |
+
+**Nega ikkita token:** access token ko'p yuboriladi, shuning uchun o'g'irlanish xavfi yuqoriroq, lekin u tez eskiradi. Foydalanuvchi esa har 30 daqiqada parol kiritmaydi, buni refresh token qiladi.
+
+**Rotate va blacklist nima uchun:**
+
+| Sozlama | Nima qiladi | Nima beradi |
+| --- | --- | --- |
+| `ROTATE_REFRESH_TOKENS` | Har refresh'da yangi refresh token beriladi | Token umrbod bitta bo'lib qolmaydi |
+| `BLACKLIST_AFTER_ROTATION` | Ishlatilgan refresh token bekor qilinadi | O'g'irlangan eski token qayta ishlamaydi |
+| `token_blacklist` app'i | Tokenlarni `OutstandingToken` va `BlacklistedToken` jadvallarida saqlaydi | Logout va parol almashtirishda tokenni bekor qilish mumkin bo'ladi |
+| `UPDATE_LAST_LOGIN` | Token olganda `last_login` yangilanadi | Oxirgi kirish vaqti ko'rinadi |
+
+> **Muhim cheklov:** blacklist faqat refresh tokenlarga ishlaydi. Logout, parol almashtirish yoki `DELETE` dan keyin ham chiqarilgan **access token** o'z muddati tugaguncha, ya'ni ko'pi bilan 30 daqiqa ishlashi mumkin. Istisno: nofaol foydalanuvchining access tokeni darhol rad etiladi (`User is inactive`), chunki `is_active` har so'rovda tekshiriladi.
+
+Eskirgan yozuvlarni jadvaldan tozalash (masalan, kuniga bir marta):
+
+```cmd
+python manage.py flushexpiredtokens
+```
+
+Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthentication`, `BasicAuthentication`. Basic'da login va parol har so'rovda yuboriladi, shuning uchun serverda uni faqat HTTPS bilan ishlating.
+
+### 26.2. Endpointlar
+
+| Metod | URL | Kim ishlatadi | Muvaffaqiyat | Xatolar |
+| --- | --- | --- | --- | --- |
+| POST | `/api/auth/register/` | Hamma | 201 | 400 |
+| POST | `/api/token/` | Hamma | 200 | 400, 401 |
+| POST | `/api/token/refresh/` | Refresh token egasi | 200 | 400, 401 |
+| POST | `/api/token/verify/` | Hamma | 200 | 400 (bekor qilingan), 401 (noto'g'ri) |
+| POST | `/api/auth/logout/` | Login qilganlar, faqat o'z tokeni | 205 | 400, 401 |
+| POST | `/api/auth/change-password/` | Login qilganlar | 200 | 400, 401 |
+| GET | `/api/users/me/` | Login qilganlar | 200 | 401 |
+| PUT, PATCH | `/api/users/me/` | Login qilganlar | 200 | 400, 401 |
+| DELETE | `/api/users/me/` | Login qilganlar (superuser'dan tashqari) | 204 | 400, 401 |
+| GET | `/api/users/` | Admin. `?search=`, `?is_active=`, `?ordering=`, `?page=` | 200 | 401, 403 |
+| GET | `/api/users/{id}/` | Egasi yoki admin | 200 | 401, 403, 404 |
+| PUT, PATCH | `/api/users/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
+| DELETE | `/api/users/{id}/` | Egasi yoki admin | 204 | 400, 401, 403, 404 |
+
+**Javobdagi maydonlar:**
+
+| Maydon | Yozish mumkinmi | Izoh |
+| --- | --- | --- |
+| `username`, `first_name`, `last_name` | Ha | |
+| `email` | Ha | Bo'sh bo'lishi mumkin. Bo'sh bo'lmasa, boshqa foydalanuvchida bo'lmasin (katta-kichik harf farqsiz) |
+| `password` | Faqat yozish | Javobda chiqmaydi. `validate_password` dan o'tadi, `set_password` bilan saqlanadi. Almashganda barcha refresh tokenlar bekor qilinadi |
+| `role`, `is_active`, `date_joined`, `last_login` | Yo'q | Yuborilgan qiymat e'tiborsiz qoldiriladi |
+| `id` | Yo'q | |
+
+`is_staff` va `is_superuser` serializer'da umuman yo'q, shuning uchun ularni API orqali o'zgartirib bo'lmaydi. Rolni admin `/api/profiles/` orqali, nofaol hisobni qayta faollashtirishni esa `/admin/` panelida qiladi.
+
+Registratsiyada `email`, `first_name`, `last_name` ixtiyoriy.
+
+> `PATCH` bilan parol almashtirishda eski parol so'ralmaydi, chunki bu topshiriq talabi edi. Eski parolni tekshiradigan xavfsizroq yo'l: `/api/auth/change-password/`.
+
+### 26.3. PUT va PATCH farqi
+
+Boshlanishida: `first_name = "Ali"`, `last_name = "Valiyev"`.
+
+| | `PATCH` | `PUT` |
+| --- | --- | --- |
+| Ma'nosi | Qisman tahrirlash | To'liq tahrirlash |
+| Majburiy maydonlar | Yo'q | `username` majburiy |
+| So'rov | `{"first_name":"Alijon"}` | `{"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Karimov"}` |
+| Natija | Faqat `first_name` o'zgaradi, `last_name` hali `Valiyev` | Yuborilgan to'rtala maydon yoziladi |
+| `username` siz yuborilsa | Ishlaydi | 400 |
+
+Haqiqiy `PUT` javobi, `username` yuborilmaganda (`400`):
+
+```json
+{"username":["Ushbu maydon to'ldirilishi shart."]}
+```
+
+> DRF'da `PUT` majburiy bo'lmagan, lekin yuborilmagan maydonni tozalamaydi: u eski qiymatida qoladi. Maydonni tozalash uchun uni aniq yuboring, masalan `"email":""`.
+
+### 26.4. Nima uchun DELETE soft delete
+
+`DELETE` foydalanuvchini bazadan o'chirmaydi, faqat `is_active=False` qiladi (`SoftDeleteUserMixin`).
+
+| Sabab | Tushuntirish |
+| --- | --- |
+| Bronlar | `Reservation.customer` `PROTECT`: broni bor foydalanuvchini o'chirib bo'lmaydi |
+| Buyurtmalar | `Order.customer` va `Order.waiter` `SET_NULL`: haqiqiy o'chirishda kim buyurtma berganini va kim xizmat qilganini yo'qotgan bo'lardik |
+| Hisobotlar | To'lov va holat tarixi to'liq qoladi |
+| Qaytarish | Xato bilan o'chirilgan hisobni `/admin/` da qayta faollashtirish mumkin |
+
+`DELETE` dan keyin: login ishlamaydi, refresh tokenlar bekor qilinadi, access token ham rad etiladi. `username` va `email` band bo'lib qoladi. Superuser'ni o'chirib bo'lmaydi (400).
+
+### 26.5. `IsOwnerOrAdmin` qanday ishlaydi
+
+DRF ruxsatni ikki bosqichda tekshiradi:
+
+| Metod | Qachon ishlaydi | Nimani biladi | Misol |
+| --- | --- | --- | --- |
+| `has_permission(request, view)` | Har so'rovda, view boshlanishida | Faqat so'rovni, yozuvni emas | `IsAuthenticated`: login qilinganmi? |
+| `has_object_permission(request, view, obj)` | `get_object()` chaqirilganda | Aniq yozuvni ham | `IsOwnerOrAdmin`: bu yozuv senikimi? |
+
+`GET /api/users/5/` ni `bob` yuborsa:
+
+```
+1. IsAuthenticated.has_permission        → login qilinmagan bo'lsa: 401
+2. get_object() bazadan 5-foydalanuvchini oladi → yo'q bo'lsa: 404
+3. IsOwnerOrAdmin.has_object_permission  → obj == request.user yoki rol admin? Yo'q bo'lsa: 403
+4. IsSelfOrAdminForWrite.has_object_permission → superuser himoyasi
+```
+
+Ikki muhim oqibat:
+
+- `IsOwnerOrAdmin` ning `has_permission` metodi yo'q, u standart `True` qaytaradi. Shuning uchun `IsAuthenticated` ham kerak: anonim foydalanuvchi 401 oladi.
+- `has_object_permission` ro'yxatda ishlamaydi, chunki `ListAPIView` `get_object()` ni chaqirmaydi. Shu sababli `/api/users/` alohida `IsAdminRole` bilan yopilgan.
+
+**`IsSelfOrAdminForWrite` nega kerak:** `IsOwnerOrAdmin` ning o'zi `admin` roliga hamma narsani ruxsat etadi. Unda `admin` rolidagi oddiy foydalanuvchi superuserning parolini `PATCH` bilan almashtirib, uning hisobiga kirib olishi mumkin edi. Bu klass superuser hisobini yozish uchun faqat superuserga ochadi. O'qish va o'zining hisobi bilan ishlashga ta'sir qilmaydi.
+
+| Kim → kimga | Oddiy foydalanuvchi | `admin` roli | Superuser |
+| --- | --- | --- | --- |
+| O'zi | Hammasi | Hammasi | Hammasi, `DELETE` dan tashqari (400) |
+| Boshqa oddiy foydalanuvchi | 403 | Hammasi | Hammasi |
+| Boshqa superuser | 403 | Faqat o'qish, yozish 403 | O'qish va tahrirlash, `DELETE` 400 |
+
+### 26.6. CMD uchun curl misollari
+
+Buyruqlar **CMD** uchun: JSON ichidagi qo'shtirnoq `\"` bilan yoziladi. PowerShell'da qo'shtirnoqlar boshqacha ishlaydi. Server ishlab turishi kerak (`python manage.py runserver`).
+
+Quyidagi javoblar shu buyruqlarni CMD orqali bajarib olingan. Tokenlar qisqartirilgan. Bazaning vaqtinchalik nusxasi ishlatilgani uchun sizda `id` va vaqtlar boshqacha bo'ladi.
+
+**Ro'yxatdan o'tish** (`201`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/auth/register/ -H "Content-Type: application/json" -d "{\"username\":\"ali\",\"email\":\"ali@example.com\",\"password\":\"Kuchli-Parol-2026\",\"password2\":\"Kuchli-Parol-2026\",\"first_name\":\"Ali\",\"last_name\":\"Valiyev\"}"
+```
+
+```json
+{"user":{"id":5,"username":"ali","email":"ali@example.com","first_name":"Ali","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":null},"access":"eyJhbGciOiJIUzI1NiIs...","refresh":"eyJhbGciOiJIUzI1NiIs..."}
+```
+
+Email band bo'lsa (`400`):
+
+```json
+{"email":["Bu email boshqa foydalanuvchiga tegishli."]}
+```
+
+**Token olish** (`200`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json" -d "{\"username\":\"ali\",\"password\":\"Kuchli-Parol-2026\"}"
+```
+
+```json
+{"refresh":"eyJhbGciOiJIUzI1NiIs...","access":"eyJhbGciOiJIUzI1NiIs..."}
+```
+
+Keyingi buyruqlar qulay bo'lishi uchun tokenlarni o'zgaruvchiga oling (o'zingiznikini to'liq qo'ying):
+
+```cmd
+set ACCESS=eyJhbGciOi...
+set REFRESH=eyJhbGciOi...
+```
+
+**O'z hisobim: GET** (`200`):
+
+```cmd
+curl http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%"
+```
+
+```json
+{"id":5,"username":"ali","email":"ali@example.com","first_name":"Ali","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+```
+
+Tokensiz (`401`):
+
+```json
+{"detail":"Authentication credentials were not provided."}
+```
+
+Basic auth bilan ham ishlaydi (`200`, javob xuddi shunday):
+
+```cmd
+curl -u ali:Kuchli-Parol-2026 http://127.0.0.1:8000/api/users/me/
+```
+
+**PATCH** (`200`):
+
+```cmd
+curl -X PATCH http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"first_name\":\"Alijon\"}"
+```
+
+```json
+{"id":5,"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Valiyev","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+```
+
+**PUT** (`200`):
+
+```cmd
+curl -X PUT http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"username\":\"ali\",\"email\":\"ali@example.com\",\"first_name\":\"Alijon\",\"last_name\":\"Karimov\"}"
+```
+
+```json
+{"id":5,"username":"ali","email":"ali@example.com","first_name":"Alijon","last_name":"Karimov","role":"customer","is_active":true,"date_joined":"2026-11-04T09:19:18.928037+05:00","last_login":"2026-11-04T09:19:20.035196+05:00"}
+```
+
+**Boshqa foydalanuvchiga urinish** (`403`):
+
+```cmd
+curl http://127.0.0.1:8000/api/users/1/ -H "Authorization: Bearer %ACCESS%"
+```
+
+```json
+{"detail":"Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan."}
+```
+
+**Tokenni tekshirish** (to'g'ri bo'lsa `200`, javob `{}`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/token/verify/ -H "Content-Type: application/json" -d "{\"token\":\"%ACCESS%\"}"
+```
+
+Noto'g'ri token (`401`):
+
+```json
+{"detail":"Token is invalid","code":"token_not_valid"}
+```
+
+**Refresh** (`200`, ikkala token ham yangi, `set` bilan yangilang):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/token/refresh/ -H "Content-Type: application/json" -d "{\"refresh\":\"%REFRESH%\"}"
+```
+
+```json
+{"access":"eyJhbGciOiJIUzI1NiIs...","refresh":"eyJhbGciOiJIUzI1NiIs..."}
+```
+
+Eski refresh token qayta yuborilsa (`401`):
+
+```json
+{"detail":"Token is blacklisted","code":"token_not_valid"}
+```
+
+**Parolni almashtirish** (`200`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/auth/change-password/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"old_password\":\"Kuchli-Parol-2026\",\"new_password\":\"Yangi-Maxfiy-2027\",\"new_password2\":\"Yangi-Maxfiy-2027\"}"
+```
+
+```json
+{"detail":"Parol almashtirildi. Qaytadan login qiling."}
+```
+
+Eski parol noto'g'ri bo'lsa (`400`):
+
+```json
+{"old_password":["Eski parol noto‘g‘ri."]}
+```
+
+Muvaffaqiyatdan keyin barcha refresh tokenlar bekor bo'ladi (`401`, `Token is blacklisted`). Eski parol bilan login ham ishlamaydi (`401`):
+
+```json
+{"detail":"No active account found with the given credentials"}
+```
+
+Yangi parol bilan qaytadan token oling va `set` bilan yangilang.
+
+**Chiqish** (`205`, javob tanasi bo'sh):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/auth/logout/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"refresh\":\"%REFRESH%\"}"
+```
+
+Noto'g'ri token (`400`):
+
+```json
+{"refresh":["Token noto‘g‘ri yoki eskirgan."]}
+```
+
+Logout'dan keyin shu refresh token bilan yangi access olib bo'lmaydi (`401`, `Token is blacklisted`). `verify` esa bekor qilingan token uchun `401` emas, `400` qaytaradi (`simplejwt` shunday ishlaydi):
+
+```json
+{"non_field_errors":["Token is blacklisted"]}
+```
+
+**Hisobni o'chirish** (`204`, javob tanasi bo'sh):
+
+```cmd
+curl -X DELETE http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%"
+```
+
+Shundan keyin eski access token rad etiladi (`401`):
+
+```json
+{"detail":"User is inactive","code":"user_inactive"}
+```
+
+Token olish ham ishlamaydi (`401`):
+
+```json
+{"detail":"No active account found with the given credentials"}
+```
+
+> `Token is blacklisted` kabi xabarlar `simplejwt` paketidan keladi va inglizcha. Loyihada yozilgan xabarlar o'zbekcha.

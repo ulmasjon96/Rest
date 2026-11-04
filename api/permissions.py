@@ -13,6 +13,28 @@ def get_role(user):
     return profile.role if profile else Profile.CUSTOMER
 
 
+class IsOwnerOrAdmin(permissions.BasePermission):
+    """Foydalanuvchi yozuvi bilan faqat uning egasi yoki admin ishlay oladi."""
+    message = 'Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan.'
+
+    def has_object_permission(self, request, view, obj):
+        return obj == request.user or get_role(request.user) == Profile.ADMIN
+
+
+class IsSelfOrAdminForWrite(permissions.BasePermission):
+    """Superuser hisobini faqat superuserning o'zi o'zgartira oladi.
+
+    Aks holda 'admin' rolidagi oddiy foydalanuvchi superuser parolini almashtirib,
+    uning hisobiga kirib olishi mumkin edi. O'qishga ta'sir qilmaydi.
+    """
+    message = 'Superuser hisobini faqat superuser o‘zgartira oladi.'
+
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS or obj == request.user:
+            return True
+        return request.user.is_superuser or not obj.is_superuser
+
+
 class IsAdminRole(permissions.BasePermission):
     def has_permission(self, request, view):
         return get_role(request.user) == Profile.ADMIN

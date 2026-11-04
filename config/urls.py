@@ -18,7 +18,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
@@ -27,6 +27,7 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),   # brauzerda login/logout
     path('api/token/', TokenObtainPairView.as_view()),   # JWT token olish
     path('api/token/refresh/', TokenRefreshView.as_view()),  # tokenni yangilash
+    path('api/token/verify/', TokenVerifyView.as_view()),    # tokenni tekshirish
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI sxema
     path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema')),  # Swagger
 ]

@@ -1,3 +1,4 @@
+import base64
 import io
 from datetime import datetime, time, timedelta
 from decimal import Decimal
@@ -902,6 +903,453 @@ class AdminTests(BaseAPITest):
         order = Order.objects.get()
         self.assertEqual(order.total, Decimal('66000.00'))
         self.assertEqual(OrderStatusEvent.objects.filter(order=order).count(), 1)
+
+
+STRONG_PASSWORD = 'Kuchli-Parol-2026'
+NEW_PASSWORD = 'Yangi-Maxfiy-2027'
+
+
+class UserAPITestBase(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.alice = User.objects.create_user('alice', email='alice@example.com', password=STRONG_PASSWORD, first_name='Alisa')
+        cls.bob = User.objects.create_user('bob', email='bob@example.com', password=STRONG_PASSWORD)
+        cls.admin = User.objects.create_user('boss', email='boss@example.com', password=STRONG_PASSWORD)
+        Profile.objects.create(user=cls.admin, role=Profile.ADMIN)
+        cls.root = User.objects.create_superuser('root', email='root@example.com', password=STRONG_PASSWORD)
+
+    def obtain(self, username='alice', password=STRONG_PASSWORD):
+        self.client.credentials()
+        return self.client.post('/api/token/', {'username': username, 'password': password}, format='json')
+
+    def bearer(self, token):
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def login_as(self, username='alice', password=STRONG_PASSWORD):
+        """Haqiqiy JWT bilan kiradi va tokenlarni qaytaradi."""
+        response = self.obtain(username, password)
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.bearer(response.data['access'])
+        return response.data
+
+    def refresh(self, token):
+        self.client.credentials()
+        return self.client.post('/api/token/refresh/', {'refresh': token}, format='json')
+
+
+class RegisterTests(UserAPITestBase):
+    def payload(self, **overrides):
+        data = {
+            'username': 'yangi', 'email': 'yangi@example.com', 'password': STRONG_PASSWORD,
+            'password2': STRONG_PASSWORD, 'first_name': 'Ali', 'last_name': 'Valiyev',
+        }
+        data.update(overrides)
+        return data
+
+    def post(self, **overrides):
+        return self.client.post('/api/auth/register/', self.payload(**overrides), format='json')
+
+    def test_success_returns_user_and_working_tokens(self):
+        response = self.post()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['user']['username'], 'yangi')
+        self.assertEqual(response.data['user']['role'], Profile.CUSTOMER)
+        self.assertNotIn('password', response.data['user'])
+
+        user = User.objects.get(username='yangi')
+        self.assertEqual(user.profile.role, Profile.CUSTOMER)
+        self.assertTrue(user.check_password(STRONG_PASSWORD))
+        self.assertFalse(user.is_staff or user.is_superuser)
+
+        self.bearer(response.data['access'])
+        self.assertEqual(self.client.get('/api/users/me/').data['username'], 'yangi')
+        self.assertEqual(self.refresh(response.data['refresh']).status_code, status.HTTP_200_OK)
+
+    def test_cannot_register_as_privileged(self):
+        response = self.post(is_staff=True, is_superuser=True, role='admin')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        user = User.objects.get(username='yangi')
+        self.assertFalse(user.is_staff or user.is_superuser)
+        self.assertEqual(user.profile.role, Profile.CUSTOMER)
+
+    def test_password_mismatch(self):
+        response = self.post(password2='Boshqa-Parol-2026')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password2', response.data)
+
+    def test_duplicate_username(self):
+        response = self.post(username='alice')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('username', response.data)
+
+    def test_duplicate_email_ignores_case(self):
+        response = self.post(email='ALICE@example.com')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['email'], ['Bu email boshqa foydalanuvchiga tegishli.'])
+
+    def test_blank_email_can_repeat(self):
+        User.objects.create_user('bosh', email='', password=STRONG_PASSWORD)
+        self.assertEqual(self.post(email='').status_code, status.HTTP_201_CREATED)
+
+    def test_weak_passwords(self):
+        for password in ('12345678', 'password', 'qisqa', 'yangi12'):
+            with self.subTest(password):
+                response = self.post(password=password, password2=password)
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+                self.assertIn('password', response.data)
+        self.assertFalse(User.objects.filter(username='yangi').exists())
+
+    def test_password_similar_to_username(self):
+        response = self.post(username='sardorbek', password='sardorbek1', password2='sardorbek1')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_stale_token_does_not_block_registration(self):
+        self.client.credentials(HTTP_AUTHORIZATION='Bearer buzilgan')
+        self.assertEqual(self.post().status_code, status.HTTP_201_CREATED)
+
+
+class JWTTests(UserAPITestBase):
+    def test_obtain_and_use_token(self):
+        tokens = self.login_as()
+        self.assertIn('refresh', tokens)
+        response = self.client.get('/api/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['username'], 'alice')
+        self.assertIsNotNone(response.data['last_login'])   # UPDATE_LAST_LOGIN
+
+    def test_wrong_password(self):
+        self.assertEqual(self.obtain(password='notogri').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_no_token(self):
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_invalid_token(self):
+        self.bearer('buzilgan.token.qiymat')
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_token_is_not_accepted_as_access(self):
+        tokens = self.login_as()
+        self.bearer(tokens['refresh'])
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_verify(self):
+        tokens = self.login_as()
+        self.client.credentials()
+        self.assertEqual(self.client.post('/api/token/verify/', {'token': tokens['access']}, format='json').status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.post('/api/token/verify/', {'token': 'buzilgan'}, format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_refresh_rotates_and_old_token_dies(self):
+        tokens = self.login_as()
+        response = self.refresh(tokens['refresh'])
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotEqual(response.data['refresh'], tokens['refresh'])
+
+        self.bearer(response.data['access'])
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_200_OK)
+
+        self.assertEqual(self.refresh(tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.refresh(response.data['refresh']).status_code, status.HTTP_200_OK)
+
+    def test_basic_auth(self):
+        credentials = base64.b64encode(f'alice:{STRONG_PASSWORD}'.encode()).decode()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Basic {credentials}')
+        response = self.client.get('/api/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['username'], 'alice')
+
+    def test_basic_auth_wrong_password(self):
+        credentials = base64.b64encode(b'alice:notogri').decode()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Basic {credentials}')
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class UserMeTests(UserAPITestBase):
+    def setUp(self):
+        self.tokens = self.login_as()
+
+    def test_get(self):
+        response = self.client.get('/api/users/me/')
+        self.assertEqual(response.data['email'], 'alice@example.com')
+        self.assertEqual(response.data['role'], Profile.CUSTOMER)
+        self.assertTrue(response.data['is_active'])
+        self.assertNotIn('password', response.data)
+        self.assertEqual(set(response.data), {
+            'id', 'username', 'email', 'first_name', 'last_name', 'role', 'is_active', 'date_joined', 'last_login',
+        })
+
+    def test_put_requires_username_and_replaces_fields(self):
+        response = self.client.put('/api/users/me/', {'first_name': 'Faqat'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('username', response.data)
+
+        response = self.client.put('/api/users/me/', {
+            'username': 'alice2', 'email': 'alice2@example.com', 'first_name': 'A', 'last_name': 'B',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.alice.refresh_from_db()
+        self.assertEqual(
+            (self.alice.username, self.alice.email, self.alice.first_name, self.alice.last_name),
+            ('alice2', 'alice2@example.com', 'A', 'B'),
+        )
+
+        # Majburiy bo'lmagan maydon PUT da yuborilmasa, eski qiymati saqlanadi.
+        response = self.client.put('/api/users/me/', {'username': 'alice3'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['email'], 'alice2@example.com')
+
+    def test_patch_changes_only_sent_field(self):
+        response = self.client.patch('/api/users/me/', {'last_name': 'Yangi'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.alice.refresh_from_db()
+        self.assertEqual(self.alice.last_name, 'Yangi')
+        self.assertEqual(self.alice.first_name, 'Alisa')
+        self.assertEqual(self.alice.email, 'alice@example.com')
+
+    def test_email_must_be_free_but_own_is_ok(self):
+        response = self.client.patch('/api/users/me/', {'email': 'BOB@example.com'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['email'], ['Bu email boshqa foydalanuvchiga tegishli.'])
+        self.assertEqual(self.client.patch('/api/users/me/', {'email': 'ALICE@example.com'}, format='json').status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.patch('/api/users/me/', {'email': ''}, format='json').status_code, status.HTTP_200_OK)
+
+    def test_cannot_escalate(self):
+        response = self.client.patch('/api/users/me/', {
+            'is_staff': True, 'is_superuser': True, 'role': 'admin', 'is_active': False,
+            'last_login': None, 'date_joined': '2000-01-01T00:00:00Z',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['role'], Profile.CUSTOMER)
+        joined = self.alice.date_joined
+        self.alice.refresh_from_db()
+        self.assertFalse(self.alice.is_staff or self.alice.is_superuser)
+        self.assertTrue(self.alice.is_active)
+        self.assertEqual(self.alice.date_joined, joined)
+        self.assertFalse(Profile.objects.filter(user=self.alice).exists())
+
+        self.assertEqual(self.client.get('/api/users/').status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_patch_password_is_hashed_validated_and_revokes_tokens(self):
+        response = self.client.patch('/api/users/me/', {'password': '12345678'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', response.data)
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.check_password(STRONG_PASSWORD))
+
+        response = self.client.patch('/api/users/me/', {'password': NEW_PASSWORD}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn('password', response.data)
+        self.alice.refresh_from_db()
+        self.assertNotEqual(self.alice.password, NEW_PASSWORD)
+        self.assertTrue(self.alice.check_password(NEW_PASSWORD))
+        self.assertEqual(self.refresh(self.tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_is_soft_and_blocks_all_access(self):
+        response = self.client.delete('/api/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.alice.refresh_from_db()
+        self.assertFalse(self.alice.is_active)
+
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.refresh(self.tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.obtain().status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_keeps_reservation_history(self):
+        table = Table.objects.create(number=1, seats=2)
+        reservation = Reservation.objects.create(
+            customer=self.alice, table=table, guests=1, start=at(12), end=at(14), name='A', phone='+998901234567',
+        )
+        self.assertEqual(self.client.delete('/api/users/me/').status_code, status.HTTP_204_NO_CONTENT)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.customer, self.alice)
+
+    def test_superuser_cannot_delete_self(self):
+        self.login_as('root')
+        response = self.client.delete('/api/users/me/')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.root.refresh_from_db()
+        self.assertTrue(self.root.is_active)
+
+
+class UserDetailTests(UserAPITestBase):
+    def url(self, user):
+        return f'/api/users/{user.pk}/'
+
+    def test_anonymous(self):
+        self.assertEqual(self.client.get(self.url(self.alice)).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_owner(self):
+        self.login_as()
+        self.assertEqual(self.client.get(self.url(self.alice)).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.patch(self.url(self.alice), {'last_name': 'Z'}, format='json').status_code, status.HTTP_200_OK)
+
+    def test_other_user_forbidden_with_uzbek_message(self):
+        self.login_as()
+        url = self.url(self.bob)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(response.data['detail'], 'Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan.')
+        self.assertEqual(self.client.patch(url, {'last_name': 'X'}, format='json').status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.put(url, {'username': 'x'}, format='json').status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.delete(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.bob.refresh_from_db()
+        self.assertTrue(self.bob.is_active)
+        self.assertEqual(self.bob.last_name, '')
+
+    def test_missing_user_is_404(self):
+        self.login_as('boss')
+        self.assertEqual(self.client.get('/api/users/999999/').status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_reads_edits_and_deletes_others(self):
+        for username in ('boss', 'root'):
+            with self.subTest(username):
+                target = User.objects.create_user(f'target_{username}', password=STRONG_PASSWORD)
+                self.login_as(username)
+                url = self.url(target)
+                self.assertEqual(self.client.get(url).status_code, status.HTTP_200_OK)
+                self.assertEqual(self.client.patch(url, {'first_name': 'Tahrir'}, format='json').status_code, status.HTTP_200_OK)
+                self.assertEqual(self.client.delete(url).status_code, status.HTTP_204_NO_CONTENT)
+                target.refresh_from_db()
+                self.assertEqual(target.first_name, 'Tahrir')
+                self.assertFalse(target.is_active)
+
+    def test_admin_cannot_escalate_others_via_serializer(self):
+        self.login_as('boss')
+        self.client.patch(self.url(self.bob), {'is_superuser': True, 'is_staff': True}, format='json')
+        self.bob.refresh_from_db()
+        self.assertFalse(self.bob.is_superuser or self.bob.is_staff)
+
+    def test_delete_revokes_target_tokens(self):
+        tokens = self.login_as('bob')
+        self.login_as('boss')
+        self.assertEqual(self.client.delete(self.url(self.bob)).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(self.refresh(tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.bearer(tokens['access'])
+        self.assertEqual(self.client.get('/api/users/me/').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_superuser_cannot_be_deleted(self):
+        self.login_as('root')
+        other = User.objects.create_superuser('root2', password=STRONG_PASSWORD)
+        response = self.client.delete(self.url(other))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        other.refresh_from_db()
+        self.assertTrue(other.is_active)
+
+    def test_admin_role_cannot_take_over_superuser(self):
+        self.login_as('boss')
+        url = self.url(self.root)
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_200_OK)
+        for request in (
+            lambda: self.client.patch(url, {'password': NEW_PASSWORD}, format='json'),
+            lambda: self.client.patch(url, {'email': 'men@example.com'}, format='json'),
+            lambda: self.client.put(url, {'username': 'root', 'password': NEW_PASSWORD}, format='json'),
+            lambda: self.client.delete(url),
+        ):
+            self.assertEqual(request().status_code, status.HTTP_403_FORBIDDEN)
+        self.root.refresh_from_db()
+        self.assertTrue(self.root.check_password(STRONG_PASSWORD))
+        self.assertEqual(self.root.email, 'root@example.com')
+
+
+class UserListTests(UserAPITestBase):
+    def usernames(self, **params):
+        return {u['username'] for u in self.client.get('/api/users/', params).data['results']}
+
+    def test_admin_only(self):
+        self.assertEqual(self.client.get('/api/users/').status_code, status.HTTP_401_UNAUTHORIZED)
+        self.login_as()
+        self.assertEqual(self.client.get('/api/users/').status_code, status.HTTP_403_FORBIDDEN)
+        for username in ('boss', 'root'):
+            self.login_as(username)
+            self.assertEqual(self.client.get('/api/users/').status_code, status.HTTP_200_OK)
+
+    def test_post_not_allowed(self):
+        self.login_as('boss')
+        self.assertEqual(self.client.post('/api/users/', {'username': 'x'}, format='json').status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_search_and_filter(self):
+        User.objects.filter(pk=self.bob.pk).update(is_active=False)
+        self.login_as('boss')
+        self.assertEqual(self.usernames(search='alice'), {'alice'})
+        self.assertEqual(self.usernames(search='bob@example'), {'bob'})
+        self.assertEqual(self.usernames(search='Alisa'), {'alice'})
+        self.assertEqual(self.usernames(is_active='false'), {'bob'})
+        self.assertNotIn('bob', self.usernames(is_active='true'))
+
+
+class ChangePasswordTests(UserAPITestBase):
+    URL = '/api/auth/change-password/'
+
+    def payload(self, **overrides):
+        data = {'old_password': STRONG_PASSWORD, 'new_password': NEW_PASSWORD, 'new_password2': NEW_PASSWORD}
+        data.update(overrides)
+        return data
+
+    def test_anonymous(self):
+        self.assertEqual(self.client.post(self.URL, self.payload(), format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_wrong_old_password(self):
+        self.login_as()
+        response = self.client.post(self.URL, self.payload(old_password='notogri'), format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['old_password'], ['Eski parol noto‘g‘ri.'])
+
+    def test_mismatch_and_weak(self):
+        self.login_as()
+        response = self.client.post(self.URL, self.payload(new_password2='Boshqa-Parol-2026'), format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('new_password2', response.data)
+        response = self.client.post(self.URL, self.payload(new_password='12345678', new_password2='12345678'), format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('new_password', response.data)
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.check_password(STRONG_PASSWORD))
+
+    def test_success_changes_login_and_revokes_all_refresh_tokens(self):
+        first = self.obtain().data
+        rotated = self.refresh(first['refresh']).data   # rotatsiyadan chiqqan token ham bekor bo'lishi kerak
+        second = self.login_as()
+
+        response = self.client.post(self.URL, self.payload(), format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+
+        self.assertEqual(self.obtain(password=STRONG_PASSWORD).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.obtain(password=NEW_PASSWORD).status_code, status.HTTP_200_OK)
+        for token in (rotated['refresh'], second['refresh']):
+            self.assertEqual(self.refresh(token).status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class LogoutTests(UserAPITestBase):
+    URL = '/api/auth/logout/'
+
+    def test_success_then_refresh_fails(self):
+        tokens = self.login_as()
+        response = self.client.post(self.URL, {'refresh': tokens['refresh']}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_205_RESET_CONTENT)
+        self.assertEqual(self.refresh(tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_invalid_tokens(self):
+        tokens = self.login_as()
+        for value in ('buzilgan', tokens['access']):
+            with self.subTest(value=value[:10]):
+                self.assertEqual(self.client.post(self.URL, {'refresh': value}, format='json').status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.client.post(self.URL, {}, format='json').status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_twice(self):
+        tokens = self.login_as()
+        self.assertEqual(self.client.post(self.URL, {'refresh': tokens['refresh']}, format='json').status_code, status.HTTP_205_RESET_CONTENT)
+        self.assertEqual(self.client.post(self.URL, {'refresh': tokens['refresh']}, format='json').status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_foreign_token_rejected(self):
+        foreign = self.login_as('bob')
+        self.login_as()
+        response = self.client.post(self.URL, {'refresh': foreign['refresh']}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.refresh(foreign['refresh']).status_code, status.HTTP_200_OK)
+
+    def test_anonymous(self):
+        tokens = self.obtain().data
+        self.client.credentials()
+        self.assertEqual(self.client.post(self.URL, {'refresh': tokens['refresh']}, format='json').status_code, status.HTTP_401_UNAUTHORIZED)
 
 
 class SeedTests(APITestCase):

@@ -2,8 +2,9 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    BookViewSet, CategoryViewSet, DailyReportView, MenuItemViewSet, MenuView, OrderStatusEventViewSet,
-    OrderViewSet, ProfileViewSet, ReservationViewSet, RestaurantSettingsView, TableViewSet,
+    BookViewSet, CategoryViewSet, ChangePasswordAPIView, DailyReportView, LogoutView, MenuItemViewSet, MenuView,
+    OrderStatusEventViewSet, OrderViewSet, ProfileViewSet, RegisterAPIView, ReservationViewSet,
+    RestaurantSettingsView, TableViewSet, UserDetailAPIView, UserListAPIView, UserUpdateAPIView,
 )
 
 router = DefaultRouter()
@@ -20,4 +21,10 @@ urlpatterns = [
     path('settings/', RestaurantSettingsView.as_view()),
     path('menu/', MenuView.as_view()),
     path('reports/daily/', DailyReportView.as_view()),
+    path('auth/register/', RegisterAPIView.as_view()),
+    path('auth/logout/', LogoutView.as_view()),
+    path('auth/change-password/', ChangePasswordAPIView.as_view()),
+    path('users/', UserListAPIView.as_view()),
+    path('users/me/', UserUpdateAPIView.as_view()),
+    path('users/<int:pk>/', UserDetailAPIView.as_view()),
 ] + router.urls

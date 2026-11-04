@@ -1,5 +1,11 @@
+import copy
+
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
@@ -7,6 +13,35 @@ from restaurant.models import (
 )
 from .models import Book
 from .permissions import get_role
+
+
+User = get_user_model()
+
+
+def blacklist_user_tokens(user):
+    """Foydalanuvchining barcha refresh tokenlarini bekor qiladi."""
+    for token in OutstandingToken.objects.filter(user=user):
+        BlacklistedToken.objects.get_or_create(token=token)
+
+
+def check_password_strength(password, user, field='password'):
+    """Django parol validatorlarini ishga tushiradi va xatoni 400 javobga aylantiradi."""
+    try:
+        validate_password(password, user=user)
+    except DjangoValidationError as error:
+        raise serializers.ValidationError({field: error.messages})
+
+
+def check_email_is_free(email, exclude_pk=None):
+    """Bo'sh bo'lmagan email boshqa foydalanuvchida bo'lmasin (katta-kichik harf farqsiz)."""
+    if not email:
+        return email
+    others = User.objects.filter(email__iexact=email)
+    if exclude_pk:
+        others = others.exclude(pk=exclude_pk)
+    if others.exists():
+        raise serializers.ValidationError('Bu email boshqa foydalanuvchiga tegishli.')
+    return email
 
 
 def make_read_only(fields, *names):
@@ -26,6 +61,116 @@ class BookSerializer(serializers.ModelSerializer):
     class Meta:
         model = Book
         fields = '__all__'
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """role, is_staff, is_superuser, is_active bu yerda o'zgarmaydi: yuborilgan qiymat e'tiborsiz qoldiriladi."""
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False, style={'input_type': 'password'})
+    role = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 'password',
+            'role', 'is_active', 'date_joined', 'last_login',
+        ]
+        read_only_fields = ['is_active', 'date_joined', 'last_login']
+
+    def get_role(self, obj) -> str:
+        return get_role(obj)
+
+    def validate_email(self, value):
+        return check_email_is_free(value, exclude_pk=getattr(self.instance, 'pk', None))
+
+    def validate(self, attrs):
+        if 'password' in attrs:
+            # Nusxa ustida: parol ismga o'xshash emasligi yangi qiymatlar bilan tekshiriladi.
+            probe = copy.copy(self.instance) if self.instance else User()
+            for name, value in attrs.items():
+                if name != 'password':
+                    setattr(probe, name, value)
+            check_password_strength(attrs['password'], probe)
+        return attrs
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for name, value in validated_data.items():
+            setattr(instance, name, value)
+        with transaction.atomic():
+            if password:
+                instance.set_password(password)
+            instance.save()
+            if password:
+                blacklist_user_tokens(instance)
+        return instance
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(required=False, allow_blank=True)
+    password = serializers.CharField(write_only=True, trim_whitespace=False, style={'input_type': 'password'})
+    password2 = serializers.CharField(write_only=True, trim_whitespace=False, style={'input_type': 'password'})
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'password2', 'first_name', 'last_name']
+
+    def validate_email(self, value):
+        return check_email_is_free(value)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({'password2': ['Parollar mos kelmadi.']})
+        probe = User(**{name: value for name, value in attrs.items() if name not in ('password', 'password2')})
+        check_password_strength(attrs['password'], probe)
+        return attrs
+
+    def create(self, validated_data):
+        validated_data.pop('password2')
+        with transaction.atomic():
+            user = User.objects.create_user(**validated_data)
+            Profile.objects.create(user=user, role=Profile.CUSTOMER)
+        return user
+
+
+class AuthResponseSerializer(serializers.Serializer):
+    """Ro'yxatdan o'tish javobi (Swagger uchun)."""
+    user = UserSerializer()
+    access = serializers.CharField()
+    refresh = serializers.CharField()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True, trim_whitespace=False, style={'input_type': 'password'})
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False, style={'input_type': 'password'})
+    new_password2 = serializers.CharField(write_only=True, trim_whitespace=False, style={'input_type': 'password'})
+
+    def validate_old_password(self, value):
+        if not self.context['request'].user.check_password(value):
+            raise serializers.ValidationError('Eski parol noto‘g‘ri.')
+        return value
+
+    def validate(self, attrs):
+        if attrs['new_password'] != attrs['new_password2']:
+            raise serializers.ValidationError({'new_password2': ['Yangi parollar mos kelmadi.']})
+        check_password_strength(attrs['new_password'], self.context['request'].user, field='new_password')
+        return attrs
+
+    def save(self, **kwargs):
+        user = self.context['request'].user
+        with transaction.atomic():
+            user.set_password(self.validated_data['new_password'])
+            user.save(update_fields=['password'])
+            blacklist_user_tokens(user)
+        return user
+
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(write_only=True)
+
+
+class DetailSerializer(serializers.Serializer):
+    """Oddiy xabarli javob (Swagger uchun)."""
+    detail = serializers.CharField()
 
 
 class RestaurantSettingsSerializer(serializers.ModelSerializer):

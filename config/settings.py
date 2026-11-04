@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -51,6 +52,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',             # DRF
     'rest_framework_simplejwt',   # JWT
+    'rest_framework_simplejwt.token_blacklist',  # bekor qilingan refresh tokenlar
     'django_filters',             # filtrlash
     'corsheaders',                # CORS
     'drf_spectacular',            # Swagger
@@ -74,10 +76,11 @@ MIDDLEWARE = [
 ]
 
 REST_FRAMEWORK = {
-    # Foydalanuvchini qanday aniqlash: JWT token yoki sessiya (brauzer)
+    # Foydalanuvchini qanday aniqlash: JWT token, sessiya (brauzer) yoki Basic (login va parol)
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.BasicAuthentication',
     ],
     # O'qish hammaga ochiq, yozish faqat login qilganlarga
     'DEFAULT_PERMISSION_CLASSES': [
@@ -94,6 +97,15 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
     # Swagger sxemasini yaratuvchi klass
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,        # har refresh'da yangi refresh token beriladi
+    'BLACKLIST_AFTER_ROTATION': True,     # eski refresh token bekor qilinadi
+    'UPDATE_LAST_LOGIN': True,            # token olganda last_login yangilanadi
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
 # Swagger: bron va buyurtma holatlari ikkalasi ham 'status' deb nomlangan,

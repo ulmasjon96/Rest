@@ -1,14 +1,19 @@
 from decimal import Decimal
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from django.db.models import Count, Prefetch, ProtectedError, Sum
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
 from rest_framework import generics, permissions, status as http_status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
@@ -16,14 +21,18 @@ from restaurant.models import (
 )
 from .models import Book
 from .permissions import (
-    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, OrderPermission, ReservationPermission, get_role,
+    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, IsOwnerOrAdmin, IsSelfOrAdminForWrite, OrderPermission,
+    ReservationPermission, get_role,
 )
 from .serializers import (
-    BookSerializer, CategorySerializer, DailyReportQuerySerializer, DailyReportSerializer,
-    MenuCategorySerializer, MenuItemSerializer, OrderSerializer, OrderStatusEventSerializer,
-    OrderStatusSerializer, ProfileSerializer, ReservationSerializer, RestaurantSettingsSerializer,
-    TableAvailabilityQuerySerializer, TableSerializer,
+    AuthResponseSerializer, BookSerializer, CategorySerializer, ChangePasswordSerializer, DailyReportQuerySerializer,
+    DailyReportSerializer, DetailSerializer, LogoutSerializer, MenuCategorySerializer, MenuItemSerializer,
+    OrderSerializer, OrderStatusEventSerializer, OrderStatusSerializer, ProfileSerializer, RegisterSerializer,
+    ReservationSerializer, RestaurantSettingsSerializer, TableAvailabilityQuerySerializer, TableSerializer,
+    UserSerializer, blacklist_user_tokens,
 )
+
+User = get_user_model()
 
 # Oshpaz faqat shu holatdagi buyurtmalarni ko'radi.
 CHEF_VISIBLE_STATUSES = (Order.NEW, Order.COOKING, Order.READY)
@@ -49,6 +58,111 @@ class BookViewSet(viewsets.ModelViewSet):
     filterset_fields = ['author']
     search_fields = ['title', 'author']
     ordering_fields = ['price', 'created_at']
+
+
+# ---------- Foydalanuvchilar va JWT ----------
+
+class SoftDeleteUserMixin:
+    """Foydalanuvchi o'chirilmaydi, faqat nofaol qilinadi: bron va buyurtma tarixi saqlanadi."""
+    def perform_destroy(self, instance):
+        if instance.is_superuser:
+            raise ValidationError({'detail': 'Superuser hisobini o‘chirib bo‘lmaydi.'})
+        with transaction.atomic():
+            instance.is_active = False
+            instance.save(update_fields=['is_active'])
+            blacklist_user_tokens(instance)
+
+
+@extend_schema_view(
+    get=extend_schema(summary='O‘z hisobim', tags=['users']),
+    put=extend_schema(summary='O‘z hisobimni to‘liq tahrirlash', tags=['users']),
+    patch=extend_schema(summary='O‘z hisobimni qisman tahrirlash', tags=['users']),
+    delete=extend_schema(summary='O‘z hisobimni nofaol qilish (soft delete)', tags=['users']),
+)
+class UserUpdateAPIView(SoftDeleteUserMixin, generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
+@extend_schema_view(
+    get=extend_schema(summary='Foydalanuvchini ko‘rish (egasi yoki admin)', tags=['users']),
+    put=extend_schema(summary='Foydalanuvchini to‘liq tahrirlash (egasi yoki admin)', tags=['users']),
+    patch=extend_schema(summary='Foydalanuvchini qisman tahrirlash (egasi yoki admin)', tags=['users']),
+    delete=extend_schema(summary='Foydalanuvchini nofaol qilish (egasi yoki admin)', tags=['users']),
+)
+class UserDetailAPIView(SoftDeleteUserMixin, generics.RetrieveUpdateDestroyAPIView):
+    queryset = User.objects.select_related('profile')
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated, IsOwnerOrAdmin, IsSelfOrAdminForWrite]
+
+
+@extend_schema_view(get=extend_schema(summary='Foydalanuvchilar ro‘yxati (admin)', tags=['users']))
+class UserListAPIView(generics.ListAPIView):
+    queryset = User.objects.select_related('profile').order_by('id')
+    serializer_class = UserSerializer
+    permission_classes = [IsAdminRole]
+    filterset_fields = ['is_active']
+    search_fields = ['username', 'email', 'first_name', 'last_name']
+    ordering_fields = ['username', 'date_joined', 'last_login']
+
+
+class RegisterAPIView(generics.CreateAPIView):
+    serializer_class = RegisterSerializer
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []   # ochiq endpoint: eskirgan token yoki sessiya xalaqit bermasin
+
+    @extend_schema(summary='Ro‘yxatdan o‘tish', tags=['auth'], responses={201: AuthResponseSerializer})
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                'user': UserSerializer(user, context=self.get_serializer_context()).data,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            },
+            status=http_status.HTTP_201_CREATED,
+        )
+
+
+class ChangePasswordAPIView(generics.GenericAPIView):
+    serializer_class = ChangePasswordSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(summary='Parolni almashtirish', tags=['auth'], responses={200: DetailSerializer})
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response({'detail': 'Parol almashtirildi. Qaytadan login qiling.'})
+
+
+class LogoutView(generics.GenericAPIView):
+    serializer_class = LogoutSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(summary='Chiqish: refresh tokenni bekor qilish', tags=['auth'], responses={
+        205: OpenApiResponse(description='Token bekor qilindi'),
+        400: OpenApiResponse(description='Token noto‘g‘ri, eskirgan yoki boshqa foydalanuvchiniki'),
+    })
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        invalid = ValidationError({'refresh': ['Token noto‘g‘ri yoki eskirgan.']})
+        try:
+            token = RefreshToken(serializer.validated_data['refresh'])
+        except TokenError:
+            raise invalid
+        # Boshqa birovning tokenini bekor qilib bo'lmasin.
+        if str(token.payload.get(jwt_settings.USER_ID_CLAIM)) != str(getattr(request.user, jwt_settings.USER_ID_FIELD)):
+            raise invalid
+        token.blacklist()
+        return Response(status=http_status.HTTP_205_RESET_CONTENT)
 
 
 # ---------- Ochiq ma'lumotlar: o'qish hammaga, yozish adminga ----------
