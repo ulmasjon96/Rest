@@ -235,7 +235,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+        'api.authentication.ThrottledBasicAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
@@ -248,16 +248,31 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        'login': '5/minute',
+        'register': '5/minute',
+        'change_password': '5/minute',
+    },
+    'NUM_PROXIES': 0,
+    'EXCEPTION_HANDLER': 'api.exceptions.uzbek_exception_handler',
 }
 ```
 
 | Kalit                            | Vazifasi                                                                                                                                                                                                                                           |
 | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DEFAULT_AUTHENTICATION_CLASSES` | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). **BasicAuthentication** login va parolni sarlavhadan oladi (26-bo'lim). |
+| `DEFAULT_AUTHENTICATION_CLASSES` | So'rov kimdan kelganini aniqlash usullari. **JWTAuthentication** `Authorization: Bearer <token>` sarlavhasini tekshiradi (React va mobil uchun). **SessionAuthentication** brauzerdagi login sessiyasini tekshiradi (DRF sahifasi va admin uchun). **ThrottledBasicAuthentication** login va parolni sarlavhadan oladi va xato urinishlarni cheklaydi (26.7-bo'lim). |
 | `DEFAULT_PERMISSION_CLASSES`     | Kimga nimaga ruxsat berilishi. **IsAuthenticatedOrReadOnly** bo'yicha o'qish (GET) hammaga ochiq, yozish (POST, PUT, DELETE) esa faqat login qilganlarga.                                                                                          |
 | `DEFAULT_FILTER_BACKENDS`        | **DjangoFilterBackend** maydon bo'yicha filtrlaydi (`?author=Ali`). **SearchFilter** matn bo'yicha qidiradi (`?search=python`). **OrderingFilter** saralaydi (`?ordering=-price`, minus kamayish tartibini bildiradi).                             |
 | `DEFAULT_PAGINATION_CLASS`       | Natijalarni sahifalarga bo'ladi (`?page=2`).                                                                                                                                                                                                       |
 | `PAGE_SIZE`                      | Bir sahifadagi yozuvlar soni: 10 ta.                                                                                                                                                                                                               |
+| `DEFAULT_THROTTLE_CLASSES`, `DEFAULT_THROTTLE_RATES`, `NUM_PROXIES` | So'rovlar sonini cheklash (26.7-bo'lim). |
+| `EXCEPTION_HANDLER`              | Xato javoblarini o'zbekchaga o'giradi (26.8-bo'lim). |
 | `DEFAULT_SCHEMA_CLASS`           | Swagger uchun API sxemasini drf-spectacular yaratishini bildiradi.                                                                                                                                                                                 |
 
 ### 6.4. CORS
@@ -275,14 +290,16 @@ API'ga qaysi frontend manzillaridan so'rov yuborishga ruxsat berilishini belgila
 ```python
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+from api.views import LoginView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('api.urls')),
     path('api-auth/', include('rest_framework.urls')),
-    path('api/token/', TokenObtainPairView.as_view()),
+    path('api/token/', LoginView.as_view()),
     path('api/token/refresh/', TokenRefreshView.as_view()),
     path('api/token/verify/', TokenVerifyView.as_view()),
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
@@ -296,7 +313,7 @@ urlpatterns = [
 | `path('admin/', admin.site.urls)`                   | `/admin/` manzilida admin panel ochiladi.                                                                                               |
 | `path('api/', include('api.urls'))`                 | `/api/` bilan boshlanadigan barcha so'rovlar `api/urls.py` ga yo'naltiriladi. **Bu fayl mavjud bo'lishi shart** (10.2-bo'limga qarang). |
 | `path('api-auth/', include('rest_framework.urls'))` | DRF brauzer sahifasida **Log in** va **Log out** tugmalarini ishlatadi.                                                                 |
-| `TokenObtainPairView`                               | `/api/token/` ga username va parol yuborilsa, `access` va `refresh` tokenlar qaytariladi.                                               |
+| `LoginView`                                         | `/api/token/` ga username va parol yuborilsa, `access` va `refresh` tokenlar qaytariladi.                                               |
 | `TokenRefreshView`                                  | `/api/token/refresh/` ga `refresh` token yuborilsa, yangi `access` token beriladi. Access token qisqa muddatli bo'lgani uchun kerak.    |
 | `SpectacularAPIView`                                | `/api/schema/` manzilida API'ning OpenAPI (YAML) sxemasi ochiladi.                                                                      |
 | `SpectacularSwaggerView`                            | `/api/docs/` manzilida Swagger sahifasi ochiladi. `url_name='schema'` sxemani qayerdan olishni ko'rsatadi.                              |
@@ -714,6 +731,8 @@ Rest/
 │   ├── admin.py             # admin panel sozlamasi
 │   ├── apps.py              # app konfiguratsiyasi
 │   ├── models.py            # Book modeli
+│   ├── authentication.py    # xato urinishlari cheklangan Basic auth
+│   ├── exceptions.py        # o'zbekcha xato xabarlari
 │   ├── permissions.py       # rollar, ruxsat klasslari, IsOwnerOrAdmin
 │   ├── serializers.py       # Book va restoran serializer'lari (qo'lda yaratilgan)
 │   ├── urls.py              # router va settings/, menu/, reports/daily/
@@ -1439,11 +1458,13 @@ Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.
 | `SeedTests` | Seed takrorlamasligi |
 | `RegisterTests` | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol |
 | `JWTTests` | Token olish, verify, refresh, rotatsiya, Basic auth |
-| `UserMeTests` | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi |
+| `UserMeTests` | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi, parol yuborilsa 400 |
 | `UserDetailTests` | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi |
 | `UserListTests` | Faqat admin, qidiruv va filtr |
 | `ChangePasswordTests` | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi |
 | `LogoutTests` | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi |
+| `ThrottleTests` | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish |
+| `UzbekMessageTests` | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan |
 
 ---
 
@@ -1491,7 +1512,7 @@ Authorization: Bearer eyJhbGciOi...
 | `token_blacklist` app'i | Tokenlarni `OutstandingToken` va `BlacklistedToken` jadvallarida saqlaydi | Logout va parol almashtirishda tokenni bekor qilish mumkin bo'ladi |
 | `UPDATE_LAST_LOGIN` | Token olganda `last_login` yangilanadi | Oxirgi kirish vaqti ko'rinadi |
 
-> **Muhim cheklov:** blacklist faqat refresh tokenlarga ishlaydi. Logout, parol almashtirish yoki `DELETE` dan keyin ham chiqarilgan **access token** o'z muddati tugaguncha, ya'ni ko'pi bilan 30 daqiqa ishlashi mumkin. Istisno: nofaol foydalanuvchining access tokeni darhol rad etiladi (`User is inactive`), chunki `is_active` har so'rovda tekshiriladi.
+> **Muhim cheklov:** blacklist faqat refresh tokenlarga ishlaydi. Logout, parol almashtirish yoki `DELETE` dan keyin ham chiqarilgan **access token** o'z muddati tugaguncha, ya'ni ko'pi bilan 30 daqiqa ishlashi mumkin. Istisno: nofaol foydalanuvchining access tokeni darhol rad etiladi (`Foydalanuvchi faol emas.`), chunki `is_active` har so'rovda tekshiriladi.
 
 Eskirgan yozuvlarni jadvaldan tozalash (masalan, kuniga bir marta):
 
@@ -1499,18 +1520,18 @@ Eskirgan yozuvlarni jadvaldan tozalash (masalan, kuniga bir marta):
 python manage.py flushexpiredtokens
 ```
 
-Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthentication`, `BasicAuthentication`. Basic'da login va parol har so'rovda yuboriladi, shuning uchun serverda uni faqat HTTPS bilan ishlating.
+Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthentication`, `ThrottledBasicAuthentication`. Basic'da login va parol har so'rovda yuboriladi, shuning uchun serverda uni faqat HTTPS bilan ishlating.
 
 ### 26.2. Endpointlar
 
 | Metod | URL | Kim ishlatadi | Muvaffaqiyat | Xatolar |
 | --- | --- | --- | --- | --- |
-| POST | `/api/auth/register/` | Hamma | 201 | 400 |
-| POST | `/api/token/` | Hamma | 200 | 400, 401 |
+| POST | `/api/auth/register/` | Hamma, 5/daqiqa | 201 | 400, 429 |
+| POST | `/api/token/` | Hamma, 5/daqiqa | 200 | 400, 401, 429 |
 | POST | `/api/token/refresh/` | Refresh token egasi | 200 | 400, 401 |
 | POST | `/api/token/verify/` | Hamma | 200 | 400 (bekor qilingan), 401 (noto'g'ri) |
 | POST | `/api/auth/logout/` | Login qilganlar, faqat o'z tokeni | 205 | 400, 401 |
-| POST | `/api/auth/change-password/` | Login qilganlar | 200 | 400, 401 |
+| POST | `/api/auth/change-password/` | Login qilganlar, 5/daqiqa | 200 | 400, 401, 429 |
 | GET | `/api/users/me/` | Login qilganlar | 200 | 401 |
 | PUT, PATCH | `/api/users/me/` | Login qilganlar | 200 | 400, 401 |
 | DELETE | `/api/users/me/` | Login qilganlar (superuser'dan tashqari) | 204 | 400, 401 |
@@ -1525,7 +1546,7 @@ Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthe
 | --- | --- | --- |
 | `username`, `first_name`, `last_name` | Ha | |
 | `email` | Ha | Bo'sh bo'lishi mumkin. Bo'sh bo'lmasa, boshqa foydalanuvchida bo'lmasin (katta-kichik harf farqsiz) |
-| `password` | Faqat yozish | Javobda chiqmaydi. `validate_password` dan o'tadi, `set_password` bilan saqlanadi. Almashganda barcha refresh tokenlar bekor qilinadi |
+| `password` | Yo'q | Yuborilsa **400**: parol faqat `/api/auth/change-password/` orqali, eski parol bilan o'zgaradi |
 | `role`, `is_active`, `date_joined`, `last_login` | Yo'q | Yuborilgan qiymat e'tiborsiz qoldiriladi |
 | `id` | Yo'q | |
 
@@ -1533,7 +1554,11 @@ Autentifikatsiya usullari ketma-ket sinaladi: `JWTAuthentication`, `SessionAuthe
 
 Registratsiyada `email`, `first_name`, `last_name` ixtiyoriy.
 
-> `PATCH` bilan parol almashtirishda eski parol so'ralmaydi, chunki bu topshiriq talabi edi. Eski parolni tekshiradigan xavfsizroq yo'l: `/api/auth/change-password/`.
+> **Nega parol jimgina e'tiborsiz qoldirilmaydi:** aks holda javob `200` bo'lardi va mijoz parol almashdi deb o'ylab qolardi. Admin ham boshqa foydalanuvchi parolini API orqali o'rnata olmaydi: buni `/admin/` paneli yoki `python manage.py changepassword <login>` bilan qiladi.
+
+```json
+{"password":["Parolni change-password orqali o‘zgartiring."]}
+```
 
 ### 26.3. PUT va PATCH farqi
 
@@ -1591,7 +1616,7 @@ Ikki muhim oqibat:
 - `IsOwnerOrAdmin` ning `has_permission` metodi yo'q, u standart `True` qaytaradi. Shuning uchun `IsAuthenticated` ham kerak: anonim foydalanuvchi 401 oladi.
 - `has_object_permission` ro'yxatda ishlamaydi, chunki `ListAPIView` `get_object()` ni chaqirmaydi. Shu sababli `/api/users/` alohida `IsAdminRole` bilan yopilgan.
 
-**`IsSelfOrAdminForWrite` nega kerak:** `IsOwnerOrAdmin` ning o'zi `admin` roliga hamma narsani ruxsat etadi. Unda `admin` rolidagi oddiy foydalanuvchi superuserning parolini `PATCH` bilan almashtirib, uning hisobiga kirib olishi mumkin edi. Bu klass superuser hisobini yozish uchun faqat superuserga ochadi. O'qish va o'zining hisobi bilan ishlashga ta'sir qilmaydi.
+**`IsSelfOrAdminForWrite` nega kerak:** `IsOwnerOrAdmin` ning o'zi `admin` roliga hamma narsani ruxsat etadi. Unda `admin` rolidagi oddiy foydalanuvchi superuserning `username` va `email` ini o'zgartirishi mumkin edi. Bu klass superuser hisobini yozish uchun faqat superuserga ochadi. O'qish va o'zining hisobi bilan ishlashga ta'sir qilmaydi.
 
 | Kim → kimga | Oddiy foydalanuvchi | `admin` roli | Superuser |
 | --- | --- | --- | --- |
@@ -1651,7 +1676,7 @@ curl http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %ACCESS%"
 Tokensiz (`401`):
 
 ```json
-{"detail":"Authentication credentials were not provided."}
+{"detail":"Login ma’lumotlari yuborilmagan."}
 ```
 
 Basic auth bilan ham ishlaydi (`200`, javob xuddi shunday):
@@ -1699,7 +1724,7 @@ curl -X POST http://127.0.0.1:8000/api/token/verify/ -H "Content-Type: applicati
 Noto'g'ri token (`401`):
 
 ```json
-{"detail":"Token is invalid","code":"token_not_valid"}
+{"detail":"Token noto‘g‘ri.","code":"token_not_valid"}
 ```
 
 **Refresh** (`200`, ikkala token ham yangi, `set` bilan yangilang):
@@ -1715,7 +1740,7 @@ curl -X POST http://127.0.0.1:8000/api/token/refresh/ -H "Content-Type: applicat
 Eski refresh token qayta yuborilsa (`401`):
 
 ```json
-{"detail":"Token is blacklisted","code":"token_not_valid"}
+{"detail":"Token bekor qilingan.","code":"token_not_valid"}
 ```
 
 **Parolni almashtirish** (`200`):
@@ -1734,10 +1759,10 @@ Eski parol noto'g'ri bo'lsa (`400`):
 {"old_password":["Eski parol noto‘g‘ri."]}
 ```
 
-Muvaffaqiyatdan keyin barcha refresh tokenlar bekor bo'ladi (`401`, `Token is blacklisted`). Eski parol bilan login ham ishlamaydi (`401`):
+Muvaffaqiyatdan keyin barcha refresh tokenlar bekor bo'ladi (`401`, `Token bekor qilingan.`). Eski parol bilan login ham ishlamaydi (`401`):
 
 ```json
-{"detail":"No active account found with the given credentials"}
+{"detail":"Login yoki parol noto‘g‘ri, yoki hisob faol emas."}
 ```
 
 Yangi parol bilan qaytadan token oling va `set` bilan yangilang.
@@ -1754,10 +1779,10 @@ Noto'g'ri token (`400`):
 {"refresh":["Token noto‘g‘ri yoki eskirgan."]}
 ```
 
-Logout'dan keyin shu refresh token bilan yangi access olib bo'lmaydi (`401`, `Token is blacklisted`). `verify` esa bekor qilingan token uchun `401` emas, `400` qaytaradi (`simplejwt` shunday ishlaydi):
+Logout'dan keyin shu refresh token bilan yangi access olib bo'lmaydi (`401`, `Token bekor qilingan.`). `verify` esa bekor qilingan token uchun `401` emas, `400` qaytaradi (`simplejwt` shunday ishlaydi):
 
 ```json
-{"non_field_errors":["Token is blacklisted"]}
+{"non_field_errors":["Token bekor qilingan."]}
 ```
 
 **Hisobni o'chirish** (`204`, javob tanasi bo'sh):
@@ -1769,13 +1794,69 @@ curl -X DELETE http://127.0.0.1:8000/api/users/me/ -H "Authorization: Bearer %AC
 Shundan keyin eski access token rad etiladi (`401`):
 
 ```json
-{"detail":"User is inactive","code":"user_inactive"}
+{"detail":"Foydalanuvchi faol emas.","code":"user_inactive"}
 ```
 
 Token olish ham ishlamaydi (`401`):
 
 ```json
-{"detail":"No active account found with the given credentials"}
+{"detail":"Login yoki parol noto‘g‘ri, yoki hisob faol emas."}
 ```
 
-> `Token is blacklisted` kabi xabarlar `simplejwt` paketidan keladi va inglizcha. Loyihada yozilgan xabarlar o'zbekcha.
+### 26.7. So'rovlarni cheklash (throttling)
+
+Cheklovdan oshilganda **429** qaytadi va `Retry-After` sarlavhasi necha soniya kutish kerakligini aytadi.
+
+| Qayerda | Doira (`scope`) | Chegara | Nimaga qarab sanaladi |
+| --- | --- | --- | --- |
+| Anonim foydalanuvchining qolgan so'rovlari | `anon` | 100/soat | IP |
+| Login qilgan foydalanuvchining qolgan so'rovlari | `user` | 1000/soat | Foydalanuvchi |
+| `POST /api/token/` va xato Basic parol | `login` | 5/daqiqa | IP |
+| `POST /api/auth/register/` | `register` | 5/daqiqa | IP |
+| `POST /api/auth/change-password/` | `change_password` | 5/daqiqa | Foydalanuvchi |
+
+Bir daqiqa ichidagi 6-urinishda (`429`):
+
+```cmd
+curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json" -d "{\"username\":\"customer1\",\"password\":\"notogri\"}"
+```
+
+```json
+{"detail":"So‘rovlar soni chegaradan oshdi. 52 soniyadan keyin urinib ko‘ring."}
+```
+
+**Oddiy sozlash yetmaydigan ikki joy, ikkalasi ham test bilan tekshirilgan:**
+
+| Muammo | Sabab | Yechim |
+| --- | --- | --- |
+| `X-Forwarded-For` ni soxtalashtirib cheklovdan qutulish | `NUM_PROXIES` berilmasa, DRF IP manzilni shu sarlavhadan oladi | `NUM_PROXIES: 0`: faqat haqiqiy `REMOTE_ADDR` ishlatiladi |
+| Basic orqali parolni cheksiz tanlash | DRF autentifikatsiyani throttling'dan **oldin** bajaradi: xato parol 401 bilan to'xtaydi va sanalmaydi | `ThrottledBasicAuthentication` xato urinishlarni `login` hisobiga yozadi. To'g'ri parol bilan ishlaydigan mijoz sanalmaydi |
+
+**Serverga chiqishda:**
+
+- **Nginx ortida** `NUM_PROXIES` ni proksilar soniga teng qiling (odatda `1`). Aks holda hamma mijoz bitta IP'dan kelgandek ko'rinadi va birgalikda cheklanadi.
+- **Bir nechta worker** bo'lsa (gunicorn), umumiy kesh kerak (Redis). Standart `LocMemCache` har jarayonda alohida sanaydi, ya'ni haqiqiy chegara workerlar soniga ko'payadi. Server qayta ishga tushganda hisob ham nolga tushadi.
+- **Bitta tarmoq:** restoran Wi-Fi'dagi barcha anonim mehmonlar bitta IP bilan chiqsa, `100/soat` ni birgalikda ishlatadi. Menyu ko'p ko'riladigan bo'lsa, `anon` ni oshiring.
+
+**Testlarda:** `api/tests.py` dagi `setUpModule` barcha tezliklarni juda katta qiladi, shuning uchun yuzlab so'rov bir-biriga xalaqit bermaydi. `ThrottleTests` esa haqiqiy tezliklarni qaytaradi va har testdan oldin keshni tozalaydi.
+
+### 26.8. O'zbekcha xato xabarlari
+
+`simplejwt` da o'zbekcha tarjima yo'q, DRF'da esa autentifikatsiya xabarlari tarjima qilinmagan. `api/exceptions.py` dagi `uzbek_exception_handler` DRF'ning standart handleridan keyin javobni ko'rib chiqadi va ma'lum matnlarni almashtiradi:
+
+| Inglizcha | O'zbekcha |
+| --- | --- |
+| `Token is blacklisted` | Token bekor qilingan. |
+| `Token is invalid` | Token noto'g'ri. |
+| `Token is expired` | Token muddati o'tgan. |
+| `Token is invalid or expired` | Token noto'g'ri yoki muddati o'tgan. |
+| `No active account found with the given credentials` | Login yoki parol noto'g'ri, yoki hisob faol emas. |
+| `Authentication credentials were not provided.` | Login ma'lumotlari yuborilmagan. |
+| `User is inactive` | Foydalanuvchi faol emas. |
+| `Request was throttled...` | So'rovlar soni chegaradan oshdi. N soniyadan keyin urinib ko'ring. |
+
+To'liq ro'yxat: `TRANSLATIONS` lug'ati.
+
+- **`code` o'zgarmaydi** (`token_not_valid`, `user_inactive`). Frontend xabar matniga emas, shu kodga qarab ishlashi kerak.
+- Javob tuzilishi saqlanadi, ichki `messages` ro'yxati ham tarjima qilinadi.
+- `simplejwt` yangilanganda matnlari o'zgarsa, tarjima qilinmagan xabar inglizcha chiqadi, lekin xato bermaydi.

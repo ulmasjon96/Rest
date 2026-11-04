@@ -3,7 +3,11 @@ import io
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
+from unittest import mock
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
@@ -12,13 +16,32 @@ from django.utils import timezone
 from PIL import Image
 from rest_framework import status
 from rest_framework.test import APITestCase
+from rest_framework.throttling import SimpleRateThrottle
+from rest_framework_simplejwt.tokens import AccessToken
 
 from restaurant.models import (
     Category, MenuItem, Order, OrderStatusEvent, Profile, Reservation, RestaurantSettings, Table,
 )
+from .exceptions import translate, translate_data
 from .models import Book
+from .serializers import UserSerializer
 
 User = get_user_model()
+
+REAL_THROTTLE_RATES = dict(settings.REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'])
+_relaxed_rates = mock.patch.object(
+    SimpleRateThrottle, 'THROTTLE_RATES', {scope: '1000000/hour' for scope in REAL_THROTTLE_RATES},
+)
+
+
+def setUpModule():
+    # Throttling boshqa testlarga xalaqit bermasin: yuzlab so'rov bitta IP'dan keladi.
+    # Cheklovning o'zini ThrottleTests haqiqiy tezliklar bilan tekshiradi.
+    _relaxed_rates.start()
+
+
+def tearDownModule():
+    _relaxed_rates.stop()
 
 
 def at(hour, days=2, minute=0):
@@ -1128,20 +1151,27 @@ class UserMeTests(UserAPITestBase):
 
         self.assertEqual(self.client.get('/api/users/').status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_patch_password_is_hashed_validated_and_revokes_tokens(self):
-        response = self.client.patch('/api/users/me/', {'password': '12345678'}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn('password', response.data)
+    def test_password_rejected_in_patch_and_put(self):
+        requests = (
+            lambda: self.client.patch('/api/users/me/', {'password': NEW_PASSWORD, 'first_name': 'Boshqa'}, format='json'),
+            lambda: self.client.put('/api/users/me/', {'username': 'alice', 'password': NEW_PASSWORD, 'first_name': 'Boshqa'}, format='json'),
+            lambda: self.client.patch('/api/users/me/', {'password': NEW_PASSWORD}, format='multipart'),
+            lambda: self.client.patch('/api/users/me/', {'password': ''}, format='json'),
+        )
+        for request in requests:
+            response = request()
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertEqual(response.data['password'], ['Parolni change-password orqali o‘zgartiring.'])
+
+        # Hech narsa o'zgarmagan: parol ham, yonidagi maydon ham, tokenlar ham.
         self.alice.refresh_from_db()
         self.assertTrue(self.alice.check_password(STRONG_PASSWORD))
+        self.assertEqual(self.alice.first_name, 'Alisa')
+        self.assertEqual(self.refresh(self.tokens['refresh']).status_code, status.HTTP_200_OK)
 
-        response = self.client.patch('/api/users/me/', {'password': NEW_PASSWORD}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertNotIn('password', response.data)
-        self.alice.refresh_from_db()
-        self.assertNotEqual(self.alice.password, NEW_PASSWORD)
-        self.assertTrue(self.alice.check_password(NEW_PASSWORD))
-        self.assertEqual(self.refresh(self.tokens['refresh']).status_code, status.HTTP_401_UNAUTHORIZED)
+    def test_password_field_not_in_serializer(self):
+        self.assertNotIn('password', self.client.get('/api/users/me/').data)
+        self.assertNotIn('password', UserSerializer().fields)
 
     def test_delete_is_soft_and_blocks_all_access(self):
         response = self.client.delete('/api/users/me/')
@@ -1217,6 +1247,13 @@ class UserDetailTests(UserAPITestBase):
         self.client.patch(self.url(self.bob), {'is_superuser': True, 'is_staff': True}, format='json')
         self.bob.refresh_from_db()
         self.assertFalse(self.bob.is_superuser or self.bob.is_staff)
+
+    def test_admin_cannot_set_others_password(self):
+        self.login_as('boss')
+        response = self.client.patch(self.url(self.bob), {'password': NEW_PASSWORD}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.bob.refresh_from_db()
+        self.assertTrue(self.bob.check_password(STRONG_PASSWORD))
 
     def test_delete_revokes_target_tokens(self):
         tokens = self.login_as('bob')
@@ -1350,6 +1387,186 @@ class LogoutTests(UserAPITestBase):
         tokens = self.obtain().data
         self.client.credentials()
         self.assertEqual(self.client.post(self.URL, {'refresh': tokens['refresh']}, format='json').status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ThrottleTests(UserAPITestBase):
+    """Haqiqiy tezliklar bilan: setUpModule dagi yumshatish shu klassda bekor qilinadi."""
+    TOKEN_URL = '/api/token/'
+    REGISTER_URL = '/api/auth/register/'
+
+    def setUp(self):
+        self.use_rates(REAL_THROTTLE_RATES)
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def use_rates(self, rates):
+        patcher = mock.patch.object(SimpleRateThrottle, 'THROTTLE_RATES', rates)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def attempt_login(self, password='notogri', **extra):
+        return self.client.post(self.TOKEN_URL, {'username': 'alice', 'password': password}, format='json', **extra)
+
+    def basic(self, password):
+        credentials = base64.b64encode(f'alice:{password}'.encode()).decode()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Basic {credentials}')
+        return self.client.get('/api/users/me/')
+
+    def assert_throttled(self, response):
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+        self.assertIn('Retry-After', response.headers)
+        self.assertRegex(response.data['detail'], r'^So‘rovlar soni chegaradan oshdi\. \d+ soniyadan keyin urinib ko‘ring\.$')
+
+    def test_configured_rates(self):
+        self.assertEqual(REAL_THROTTLE_RATES['anon'], '100/hour')
+        self.assertEqual(REAL_THROTTLE_RATES['user'], '1000/hour')
+        self.assertEqual(REAL_THROTTLE_RATES['login'], '5/minute')
+        self.assertEqual(REAL_THROTTLE_RATES['register'], '5/minute')
+
+    def test_login_limit_blocks_even_correct_password(self):
+        for _ in range(5):
+            self.assertEqual(self.attempt_login().status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assert_throttled(self.attempt_login(STRONG_PASSWORD))
+
+    def test_login_limit_is_per_ip(self):
+        for _ in range(5):
+            self.attempt_login()
+        self.assert_throttled(self.attempt_login())
+        self.assertEqual(self.attempt_login(STRONG_PASSWORD, REMOTE_ADDR='10.0.0.2').status_code, status.HTTP_200_OK)
+
+    def test_spoofed_forwarded_header_does_not_bypass(self):
+        for number in range(5):
+            self.attempt_login(HTTP_X_FORWARDED_FOR=f'1.2.3.{number}')
+        self.assert_throttled(self.attempt_login(HTTP_X_FORWARDED_FOR='9.9.9.9'))
+
+    def test_register_limit(self):
+        for number in range(5):
+            response = self.client.post(self.REGISTER_URL, {
+                'username': f'yangi{number}', 'password': STRONG_PASSWORD, 'password2': STRONG_PASSWORD,
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        response = self.client.post(self.REGISTER_URL, {
+            'username': 'yangi9', 'password': STRONG_PASSWORD, 'password2': STRONG_PASSWORD,
+        }, format='json')
+        self.assert_throttled(response)
+        self.assertFalse(User.objects.filter(username='yangi9').exists())
+
+    def test_login_and_register_have_separate_limits(self):
+        for _ in range(5):
+            self.attempt_login()
+        self.assert_throttled(self.attempt_login())
+        response = self.client.post(self.REGISTER_URL, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_change_password_limit_blocks_guessing(self):
+        self.client.force_authenticate(user=self.alice)
+        url = '/api/auth/change-password/'
+        def data(old):
+            return {'old_password': old, 'new_password': NEW_PASSWORD, 'new_password2': NEW_PASSWORD}
+        for _ in range(5):
+            self.assertEqual(self.client.post(url, data('notogri'), format='json').status_code, status.HTTP_400_BAD_REQUEST)
+        self.assert_throttled(self.client.post(url, data(STRONG_PASSWORD), format='json'))
+        self.alice.refresh_from_db()
+        self.assertTrue(self.alice.check_password(STRONG_PASSWORD))
+
+    def test_anon_rate(self):
+        self.use_rates({**REAL_THROTTLE_RATES, 'anon': '3/minute'})
+        for _ in range(3):
+            self.assertEqual(self.client.get('/api/menu/').status_code, status.HTTP_200_OK)
+        self.assert_throttled(self.client.get('/api/menu/'))
+
+    def test_user_rate_is_per_user(self):
+        self.use_rates({**REAL_THROTTLE_RATES, 'user': '3/minute'})
+        self.client.force_authenticate(user=self.alice)
+        for _ in range(3):
+            self.assertEqual(self.client.get('/api/menu/').status_code, status.HTTP_200_OK)
+        self.assert_throttled(self.client.get('/api/menu/'))
+        self.client.force_authenticate(user=self.bob)
+        self.assertEqual(self.client.get('/api/menu/').status_code, status.HTTP_200_OK)
+
+    def test_basic_auth_guessing_is_limited(self):
+        for _ in range(5):
+            self.assertEqual(self.basic('notogri').status_code, status.HTTP_401_UNAUTHORIZED)
+        # To'g'ri parol ham rad etiladi: aks holda tanlash davom etaverardi.
+        self.assert_throttled(self.basic(STRONG_PASSWORD))
+
+    def test_basic_auth_shares_limit_with_token_endpoint(self):
+        for _ in range(5):
+            self.attempt_login()
+        self.assert_throttled(self.basic('notogri'))
+
+    def test_correct_basic_auth_is_not_counted(self):
+        for _ in range(8):
+            self.assertEqual(self.basic(STRONG_PASSWORD).status_code, status.HTTP_200_OK)
+
+
+class UzbekMessageTests(UserAPITestBase):
+    def test_blacklisted_refresh(self):
+        tokens = self.obtain().data
+        self.refresh(tokens['refresh'])
+        response = self.refresh(tokens['refresh'])
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data['detail'], 'Token bekor qilingan.')
+        self.assertEqual(response.data['code'], 'token_not_valid')   # dastur uchun kod o'zgarmaydi
+
+    def test_invalid_token_on_verify(self):
+        response = self.client.post('/api/token/verify/', {'token': 'buzilgan'}, format='json')
+        self.assertEqual(response.data['detail'], 'Token noto‘g‘ri.')
+
+    def test_blacklisted_token_on_verify(self):
+        tokens = self.obtain().data
+        self.refresh(tokens['refresh'])
+        response = self.client.post('/api/token/verify/', {'token': tokens['refresh']}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data['non_field_errors'], ['Token bekor qilingan.'])
+
+    def test_expired_token(self):
+        token = AccessToken.for_user(self.alice)
+        token.set_exp(lifetime=-timedelta(minutes=1))
+        response = self.client.post('/api/token/verify/', {'token': str(token)}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(response.data['detail'], 'Token muddati o‘tgan.')
+
+    def test_bad_bearer_translates_nested_messages(self):
+        self.bearer('buzilgan.token.qiymat')
+        response = self.client.get('/api/users/me/')
+        self.assertEqual(response.data['detail'], 'Token hech qaysi token turiga mos kelmaydi.')
+        self.assertEqual(response.data['code'], 'token_not_valid')
+        self.assertEqual(response.data['messages'][0]['message'], 'Token noto‘g‘ri.')
+        self.assertEqual(response.data['messages'][0]['token_type'], 'access')
+
+    def test_wrong_login(self):
+        response = self.obtain(password='notogri')
+        self.assertEqual(response.data['detail'], 'Login yoki parol noto‘g‘ri, yoki hisob faol emas.')
+
+    def test_no_credentials(self):
+        self.assertEqual(self.client.get('/api/users/me/').data['detail'], 'Login ma’lumotlari yuborilmagan.')
+
+    def test_inactive_user(self):
+        tokens = self.obtain().data
+        User.objects.filter(pk=self.alice.pk).update(is_active=False)
+        self.bearer(tokens['access'])
+        response = self.client.get('/api/users/me/')
+        self.assertEqual(response.data['detail'], 'Foydalanuvchi faol emas.')
+
+    def test_wrong_basic_password(self):
+        credentials = base64.b64encode(b'alice:notogri').decode()
+        self.client.credentials(HTTP_AUTHORIZATION=f'Basic {credentials}')
+        self.assertEqual(self.client.get('/api/users/me/').data['detail'], 'Login yoki parol noto‘g‘ri.')
+
+    def test_translate_helpers(self):
+        self.assertEqual(translate("Token has no 'jti' claim"), 'Tokenda «jti» maydoni yo‘q.')
+        self.assertEqual(translate("Token 'exp' claim has expired"), 'Tokenning «exp» maydoni muddati o‘tgan.')
+        self.assertEqual(translate('Boshqa matn'), 'Boshqa matn')
+        self.assertEqual(
+            translate_data({'code': 'Token is invalid', 'a': ['Token is expired'], 'n': 1}),
+            {'code': 'Token is invalid', 'a': ['Token muddati o‘tgan.'], 'n': 1},
+        )
+
+    def test_project_messages_untouched(self):
+        self.login_as()
+        response = self.client.get(f'/api/users/{self.bob.pk}/')
+        self.assertEqual(response.data['detail'], 'Bu amal faqat hisob egasi yoki administrator uchun ruxsat etilgan.')
 
 
 class SeedTests(APITestCase):

@@ -18,14 +18,16 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
+from rest_framework_simplejwt.views import TokenRefreshView, TokenVerifyView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+from api.views import LoginView
 
 urlpatterns = [
     path('admin/', admin.site.urls),                     # admin panel
     path('api/', include('api.urls')),                   # bizning API
     path('api-auth/', include('rest_framework.urls')),   # brauzerda login/logout
-    path('api/token/', TokenObtainPairView.as_view()),   # JWT token olish
+    path('api/token/', LoginView.as_view()),             # JWT token olish (5/daqiqa)
     path('api/token/refresh/', TokenRefreshView.as_view()),  # tokenni yangilash
     path('api/token/verify/', TokenVerifyView.as_view()),    # tokenni tekshirish
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),  # OpenAPI sxema

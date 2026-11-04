@@ -10,10 +10,12 @@ from rest_framework import generics, permissions, status as http_status, viewset
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from restaurant.models import (
     Category, MenuItem, Order, OrderItem, OrderStatusEvent, Profile, Reservation,
@@ -109,10 +111,18 @@ class UserListAPIView(generics.ListAPIView):
     ordering_fields = ['username', 'date_joined', 'last_login']
 
 
+class LoginView(TokenObtainPairView):
+    """Parol tanlashga qarshi qattiq cheklov bilan token olish."""
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+
 class RegisterAPIView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     authentication_classes = []   # ochiq endpoint: eskirgan token yoki sessiya xalaqit bermasin
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'register'
 
     @extend_schema(summary='Ro‘yxatdan o‘tish', tags=['auth'], responses={201: AuthResponseSerializer})
     def post(self, request, *args, **kwargs):
@@ -133,6 +143,9 @@ class RegisterAPIView(generics.CreateAPIView):
 class ChangePasswordAPIView(generics.GenericAPIView):
     serializer_class = ChangePasswordSerializer
     permission_classes = [permissions.IsAuthenticated]
+    # O'g'irlangan access token bilan eski parolni tanlab bo'lmasin.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'change_password'
 
     @extend_schema(summary='Parolni almashtirish', tags=['auth'], responses={200: DetailSerializer})
     def post(self, request, *args, **kwargs):

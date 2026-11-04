@@ -1,4 +1,4 @@
-import copy
+from collections.abc import Mapping
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -64,14 +64,16 @@ class BookSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """role, is_staff, is_superuser, is_active bu yerda o'zgarmaydi: yuborilgan qiymat e'tiborsiz qoldiriladi."""
-    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False, style={'input_type': 'password'})
+    """role, is_staff, is_superuser, is_active bu yerda o'zgarmaydi: yuborilgan qiymat e'tiborsiz qoldiriladi.
+
+    Parol esa jimgina e'tiborsiz qoldirilmaydi: mijoz parol almashdi deb o'ylab qolmasligi uchun 400 qaytadi.
+    """
     role = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            'id', 'username', 'email', 'first_name', 'last_name', 'password',
+            'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'is_active', 'date_joined', 'last_login',
         ]
         read_only_fields = ['is_active', 'date_joined', 'last_login']
@@ -79,30 +81,13 @@ class UserSerializer(serializers.ModelSerializer):
     def get_role(self, obj) -> str:
         return get_role(obj)
 
+    def to_internal_value(self, data):
+        if isinstance(data, Mapping) and 'password' in data:
+            raise serializers.ValidationError({'password': ['Parolni change-password orqali o‘zgartiring.']})
+        return super().to_internal_value(data)
+
     def validate_email(self, value):
         return check_email_is_free(value, exclude_pk=getattr(self.instance, 'pk', None))
-
-    def validate(self, attrs):
-        if 'password' in attrs:
-            # Nusxa ustida: parol ismga o'xshash emasligi yangi qiymatlar bilan tekshiriladi.
-            probe = copy.copy(self.instance) if self.instance else User()
-            for name, value in attrs.items():
-                if name != 'password':
-                    setattr(probe, name, value)
-            check_password_strength(attrs['password'], probe)
-        return attrs
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop('password', None)
-        for name, value in validated_data.items():
-            setattr(instance, name, value)
-        with transaction.atomic():
-            if password:
-                instance.set_password(password)
-            instance.save()
-            if password:
-                blacklist_user_tokens(instance)
-        return instance
 
 
 class RegisterSerializer(serializers.ModelSerializer):

@@ -24,8 +24,8 @@ class IsOwnerOrAdmin(permissions.BasePermission):
 class IsSelfOrAdminForWrite(permissions.BasePermission):
     """Superuser hisobini faqat superuserning o'zi o'zgartira oladi.
 
-    Aks holda 'admin' rolidagi oddiy foydalanuvchi superuser parolini almashtirib,
-    uning hisobiga kirib olishi mumkin edi. O'qishga ta'sir qilmaydi.
+    Aks holda 'admin' rolidagi oddiy foydalanuvchi superuserning username va emailini
+    o'zgartirishi yoki hisobiga aralashishi mumkin edi. O'qishga ta'sir qilmaydi.
     """
     message = 'Superuser hisobini faqat superuser o‘zgartira oladi.'
 

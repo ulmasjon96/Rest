@@ -80,7 +80,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+        'api.authentication.ThrottledBasicAuthentication',
     ],
     # O'qish hammaga ochiq, yozish faqat login qilganlarga
     'DEFAULT_PERMISSION_CLASSES': [
@@ -97,6 +97,24 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 10,
     # Swagger sxemasini yaratuvchi klass
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    # So'rovlar sonini cheklash. Hisob yuritish CACHES dagi keshda saqlanadi.
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour',
+        # Parol tanlash va ommaviy ro'yxatdan o'tishga qarshi qattiq cheklovlar
+        'login': '5/minute',
+        'register': '5/minute',
+        'change_password': '5/minute',
+    },
+    # IP manzil X-Forwarded-For dan olinmaydi: usiz bu sarlavhani soxtalashtirib cheklovdan
+    # qutulish mumkin. Server nginx ortida bo'lsa, proksilar sonini yozing (masalan, 1).
+    'NUM_PROXIES': 0,
+    # simplejwt va DRF xabarlarini o'zbekchaga o'giradi
+    'EXCEPTION_HANDLER': 'api.exceptions.uzbek_exception_handler',
 }
 
 SIMPLE_JWT = {
