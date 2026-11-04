@@ -20,3 +20,8 @@ class ProductAdmin(admin.ModelAdmin):
         if not change:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+    def has_delete_permission(self, request, obj=None):
+        # Mahsulotni faqat egasi /api/users/me/products/{id}/ orqali o'chiradi.
+        # Django delete_selected amalini ham shu huquqqa qarab o'zi olib tashlaydi.
+        return False

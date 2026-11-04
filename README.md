@@ -1010,19 +1010,19 @@ total          = subtotal + service_amount
 
 Rol `Profile.role` dan olinadi. `is_superuser = True` har doim **admin**. Profili yo'q foydalanuvchi **customer** hisoblanadi. `is_staff` rolga ta'sir qilmaydi. Cheklovlar ikki qavatli: `api/permissions.py` amalni, `get_queryset` esa qaysi yozuvlar ko'rinishini belgilaydi. Shuning uchun boshqa birovning yozuvi **404** qaytaradi.
 
-| Resurs                                    | Anonim | customer                                   | chef                                         | waiter                          | admin                           |
-| ----------------------------------------- | ------ | ------------------------------------------ | -------------------------------------------- | ------------------------------- | ------------------------------- |
-| Menyu, kategoriya, taom, stol, sozlamalar | O'qish | O'qish                                     | O'qish                                       | O'qish                          | **Hammasi**                     |
-| Bron                                      | —      | O'zinikini ko'radi, yaratadi, bekor qiladi | —                                            | **Hammasi**                     | **Hammasi**                     |
-| Buyurtma                                  | —      | O'zinikini ko'radi, yaratadi               | `new`, `cooking`, `ready` dagilarini ko'radi | **Hammasi**                     | **Hammasi**                     |
-| `set-status`                              | —      | —                                          | Faqat `cooking`, `ready` ga                  | Barcha ruxsat etilgan o'tishlar | Barcha ruxsat etilgan o'tishlar |
-| Oshxona ro'yxati                          | —      | —                                          | Ha                                           | Ha                              | Ha                              |
-| Holat tarixi (o'qish)                     | —      | O'z buyurtmalari                           | Ko'radigan buyurtmalari                      | Hammasi                         | Hammasi                         |
-| Profillar, kunlik hisobot                 | —      | —                                          | —                                            | —                               | **Hammasi**                     |
-| Kitoblar (`Book`)                         | O'qish | **Hammasi**                                | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
-| Mahsulotlar (`products/`) | Ro'yxat | Ro'yxat, tafsilot, qo'shish; o'zinikini boshqaradi | Mijoz kabi | Mijoz kabi | **Hammasi** (27.2-bo'lim) |
-| O'z foydalanuvchi hisobi (`users/me/`)    | —      | **Hammasi**                                | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
-| Boshqa foydalanuvchilar (`users/`)        | —      | —                                          | —                                            | —                               | **Hammasi** (26.5-bo'lim)       |
+| Resurs                                    | Anonim  | customer                                           | chef                                         | waiter                          | admin                           |
+| ----------------------------------------- | ------- | -------------------------------------------------- | -------------------------------------------- | ------------------------------- | ------------------------------- |
+| Menyu, kategoriya, taom, stol, sozlamalar | O'qish  | O'qish                                             | O'qish                                       | O'qish                          | **Hammasi**                     |
+| Bron                                      | —       | O'zinikini ko'radi, yaratadi, bekor qiladi         | —                                            | **Hammasi**                     | **Hammasi**                     |
+| Buyurtma                                  | —       | O'zinikini ko'radi, yaratadi                       | `new`, `cooking`, `ready` dagilarini ko'radi | **Hammasi**                     | **Hammasi**                     |
+| `set-status`                              | —       | —                                                  | Faqat `cooking`, `ready` ga                  | Barcha ruxsat etilgan o'tishlar | Barcha ruxsat etilgan o'tishlar |
+| Oshxona ro'yxati                          | —       | —                                                  | Ha                                           | Ha                              | Ha                              |
+| Holat tarixi (o'qish)                     | —       | O'z buyurtmalari                                   | Ko'radigan buyurtmalari                      | Hammasi                         | Hammasi                         |
+| Profillar, kunlik hisobot                 | —       | —                                                  | —                                            | —                               | **Hammasi**                     |
+| Kitoblar (`Book`)                         | O'qish  | **Hammasi**                                        | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
+| Mahsulotlar (`products/`)                 | Ro'yxat | Ro'yxat, tafsilot, qo'shish; o'zinikini tahrirlaydi va profilidan o'chiradi | Mijoz kabi                                   | Mijoz kabi                      | Hammasini tahrirlaydi, boshqanikini o'chirmaydi (27.6-bo'lim)       |
+| O'z foydalanuvchi hisobi (`users/me/`)    | —       | **Hammasi**                                        | **Hammasi**                                  | **Hammasi**                     | **Hammasi**                     |
+| Boshqa foydalanuvchilar (`users/`)        | —       | —                                                  | —                                            | —                               | **Hammasi** (26.5-bo'lim)       |
 
 Avtomatik to'ldiriladigan maydonlar:
 
@@ -1070,9 +1070,11 @@ Barcha manzillar `/api/` bilan boshlanadi. Ro'yxatlar sahifalanadi (`?page=`), u
 | GET                           | `reports/daily/?date=YYYY-MM-DD`                          | admin                                           | Kunlik hisobot (sana yuborilmasa, bugun)                                        |
 | GET                           | `books/`, `books/{id}/`                                   | Hamma                                           | Kitoblar                                                                        |
 | POST, PUT, PATCH, DELETE      | `books/`, `books/{id}/`                                   | Login qilganlar                                 | Boshqarish                                                                      |
-| GET | `products/` | Hamma | Mahsulotlar ro'yxati (27-bo'lim) |
-| GET, POST | `products/{id}/`, `products/` | Login qilganlar | Tafsilot va qo'shish |
-| PUT, PATCH, DELETE | `products/{id}/` | Egasi yoki admin | Boshqarish |
+| GET                           | `products/`                                               | Hamma                                           | Mahsulotlar ro'yxati (27-bo'lim)                                                |
+| GET, POST                     | `products/{id}/`, `products/`                             | Login qilganlar                                 | Tafsilot va qo'shish                                                            |
+| PUT, PATCH            | `products/{id}/`                                          | Egasi yoki admin                                | Boshqarish                                                                      |
+| GET | `users/me/products/`, `users/me/products/{id}/` | Login qilganlar, faqat o'ziniki | Mening mahsulotlarim |
+| DELETE | `users/me/products/{id}/` | Faqat egasi | Mahsulotni va rasmini o'chirish (27.6-bo'lim) |
 
 Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rolga ruxsat yo'q, **404** yozuv yo'q yoki sizga ko'rinmaydi.
 
@@ -1446,31 +1448,33 @@ python manage.py test api.tests.ReservationTests.test_overlap_rejected
 
 Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.py` da.
 
-| Klass                    | Nimani tekshiradi                                                                                         |
-| ------------------------ | --------------------------------------------------------------------------------------------------------- |
-| `CatalogPermissionTests` | Menyu, stol va sozlamalarga ruxsatlar; `/api/menu/` filtri; `/api/schema/`                                |
-| `SettingsSingletonTests` | Yagona yozuv, baza cheklovi, ish vaqti, foiz, logotip formati va hajmi                                    |
-| `ReservationTests`       | Rollar, to'qnashuv, sig'im, ish vaqti, o'tgan va uzoq sana, `tables/available`                            |
-| `OrderCreateTests`       | Summalar, yaxlitlash, narx muzlashi, mavjud bo'lmagan taom, `dine_in` da stol                             |
-| `OrderPermissionTests`   | Har bir rol uchun buyurtmaga ruxsatlar                                                                    |
-| `OrderStatusTests`       | To'g'ri va noto'g'ri o'tishlar, tarix, `paid_at`                                                          |
-| `ChefTests`              | Oshpaz cheklovlari va `orders/kitchen`                                                                    |
-| `OrderEventTests`        | Tarix faqat o'qish uchun, rol bo'yicha filtr                                                              |
-| `ProtectedDeleteTests`   | `ProtectedError` → 400                                                                                    |
-| `DailyReportTests`       | Hisobot ruxsati va qiymatlari                                                                             |
-| `BookTests`              | `Book` CRUD                                                                                               |
-| `AdminTests`             | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish                                               |
-| `SeedTests`              | Seed takrorlamasligi                                                                                      |
-| `RegisterTests`          | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol                                |
-| `JWTTests`               | Token olish, verify, refresh, rotatsiya, Basic auth                                                       |
-| `UserMeTests`            | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi, parol yuborilsa 400              |
-| `UserDetailTests`        | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi                                                    |
-| `UserListTests`          | Faqat admin, qidiruv va filtr                                                                             |
-| `ChangePasswordTests`    | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi                                                        |
-| `LogoutTests`            | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi                                        |
-| `ThrottleTests`          | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish |
-| `UzbekMessageTests`      | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan                                                |
-| `ProductAPITests` | Ro'yxat, tafsilot, ruxsatlar, egasi va admin, narx, nom va rasm validatsiyasi, qidiruv, saralash, admin panel |
+| Klass                    | Nimani tekshiradi                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `CatalogPermissionTests` | Menyu, stol va sozlamalarga ruxsatlar; `/api/menu/` filtri; `/api/schema/`                                    |
+| `SettingsSingletonTests` | Yagona yozuv, baza cheklovi, ish vaqti, foiz, logotip formati va hajmi                                        |
+| `ReservationTests`       | Rollar, to'qnashuv, sig'im, ish vaqti, o'tgan va uzoq sana, `tables/available`                                |
+| `OrderCreateTests`       | Summalar, yaxlitlash, narx muzlashi, mavjud bo'lmagan taom, `dine_in` da stol                                 |
+| `OrderPermissionTests`   | Har bir rol uchun buyurtmaga ruxsatlar                                                                        |
+| `OrderStatusTests`       | To'g'ri va noto'g'ri o'tishlar, tarix, `paid_at`                                                              |
+| `ChefTests`              | Oshpaz cheklovlari va `orders/kitchen`                                                                        |
+| `OrderEventTests`        | Tarix faqat o'qish uchun, rol bo'yicha filtr                                                                  |
+| `ProtectedDeleteTests`   | `ProtectedError` → 400                                                                                        |
+| `DailyReportTests`       | Hisobot ruxsati va qiymatlari                                                                                 |
+| `BookTests`              | `Book` CRUD                                                                                                   |
+| `AdminTests`             | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish                                                   |
+| `SeedTests`              | Seed takrorlamasligi                                                                                          |
+| `RegisterTests`          | Ro'yxatdan o'tish, token, Profile, takror username va email, kuchsiz parol                                    |
+| `JWTTests`               | Token olish, verify, refresh, rotatsiya, Basic auth                                                           |
+| `UserMeTests`            | `users/me/`: GET, PUT, PATCH, soft delete, huquqni ko'tarib bo'lmasligi, parol yuborilsa 400                  |
+| `UserDetailTests`        | Egasi, boshqa foydalanuvchi, admin, superuser himoyasi                                                        |
+| `UserListTests`          | Faqat admin, qidiruv va filtr                                                                                 |
+| `ChangePasswordTests`    | Eski parol, kuchsiz parol, tokenlar bekor bo'lishi                                                            |
+| `LogoutTests`            | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi                                            |
+| `ThrottleTests`          | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish     |
+| `UzbekMessageTests`      | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan                                                    |
+| `ProductAPITests`        | Ro'yxat, tafsilot, ruxsatlar, egasi va admin, narx, nom va rasm validatsiyasi, qidiruv, saralash, admin panel |
+| `MyProductTests` | Mening mahsulotlarim, begona mahsulot 404, egasi 204, rasm fayli o'chishi, ProtectedError 400 |
+| `ProductAdminDeleteTests` | Admin panelda o'chirish sahifasi 403, `delete_selected` yo'q |
 
 ---
 
@@ -1915,52 +1919,52 @@ To'liq ro'yxat: `TRANSLATIONS` lug'ati.
 
 ## 27. Mahsulotlar API
 
-Mahsulotlarni ro'yxatdan o'tmaganlar ham ko'ra oladi, tafsilot va qo'shish uchun login kerak, tahrirlashni esa faqat egasi yoki admin qiladi. Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
+Mahsulotlarni ro'yxatdan o'tmaganlar ham ko'ra oladi, tafsilot va qo'shish uchun login kerak, tahrirlashni egasi yoki admin qiladi. O'chirishni esa **faqat egasi, o'z profili orqali** qiladi (27.6-bo'lim). Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
 
 ### 27.1. Model maydonlari
 
-| Maydon | Turi | Cheklov | Izoh |
-| --- | --- | --- | --- |
-| `id` | Avtomatik | Faqat o'qish | |
-| `name` | `CharField(200)` | Majburiy, bo'sh bo'lmasin | Nomi |
-| `description` | `TextField` | Ixtiyoriy | Tavsif |
-| `price` | `DecimalField(12, 2)` | Majburiy, `>= 0` | Narxi, so'mda. `0` ruxsat etiladi |
-| `quantity` | `PositiveIntegerField` | `>= 0`, standart `0` | Soni |
-| `image` | `ImageField` | Ixtiyoriy, 3 MB gacha, JPEG, PNG yoki WebP | `media/products/` ga saqlanadi. Fayl mazmuni tekshiriladi |
-| `created_by` | FK `User`, `PROTECT` | Faqat o'qish | Serverda `request.user` dan qo'yiladi. Javobda `username` chiqadi |
-| `created_at`, `updated_at` | `DateTimeField` | Faqat o'qish | Avtomatik |
+| Maydon                     | Turi                   | Cheklov                                    | Izoh                                                              |
+| -------------------------- | ---------------------- | ------------------------------------------ | ----------------------------------------------------------------- |
+| `id`                       | Avtomatik              | Faqat o'qish                               |                                                                   |
+| `name`                     | `CharField(200)`       | Majburiy, bo'sh bo'lmasin                  | Nomi                                                              |
+| `description`              | `TextField`            | Ixtiyoriy                                  | Tavsif                                                            |
+| `price`                    | `DecimalField(12, 2)`  | Majburiy, `>= 0`                           | Narxi, so'mda. `0` ruxsat etiladi                                 |
+| `quantity`                 | `PositiveIntegerField` | `>= 0`, standart `0`                       | Soni                                                              |
+| `image`                    | `ImageField`           | Ixtiyoriy, 3 MB gacha, JPEG, PNG yoki WebP | `media/products/` ga saqlanadi. Fayl mazmuni tekshiriladi         |
+| `created_by`               | FK `User`, `PROTECT`   | Faqat o'qish                               | Serverda `request.user` dan qo'yiladi. Javobda `username` chiqadi |
+| `created_at`, `updated_at` | `DateTimeField`        | Faqat o'qish                               | Avtomatik                                                         |
 
 Standart tartib: eng yangisi birinchi. `PROTECT` sababli mahsuloti bor foydalanuvchini bazadan o'chirib bo'lmaydi; API dagi soft delete (26.4-bo'lim) esa unga ta'sir qilmaydi, mahsulot va uning egasi qoladi.
 
 ### 27.2. Ruxsatlar
 
-| Amal | Metod | URL | Kim | Javob | Xatolar |
-| --- | --- | --- | --- | --- | --- |
-| Ro'yxat | GET | `/api/products/` | Hamma, anonim ham | 200 | 429 |
-| Tafsilot | GET | `/api/products/{id}/` | Login qilganlar | 200 | 401, 404 |
-| Qo'shish | POST | `/api/products/` | Login qilganlar | 201 | 400, 401 |
-| To'liq tahrirlash | PUT | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
-| Qisman tahrirlash | PATCH | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
-| O'chirish | DELETE | `/api/products/{id}/` | Egasi yoki admin | 204 | 401, 403, 404 |
+| Amal              | Metod  | URL                   | Kim               | Javob | Xatolar            |
+| ----------------- | ------ | --------------------- | ----------------- | ----- | ------------------ |
+| Ro'yxat           | GET    | `/api/products/`      | Hamma, anonim ham | 200   | 429                |
+| Tafsilot          | GET    | `/api/products/{id}/` | Login qilganlar   | 200   | 401, 404           |
+| Qo'shish          | POST   | `/api/products/`      | Login qilganlar   | 201   | 400, 401           |
+| To'liq tahrirlash | PUT    | `/api/products/{id}/` | Egasi yoki admin  | 200   | 400, 401, 403, 404 |
+| Qisman tahrirlash | PATCH  | `/api/products/{id}/` | Egasi yoki admin  | 200   | 400, 401, 403, 404 |
+| O'chirish | DELETE | `/api/products/{id}/` | Hech kim: profil orqali (27.6-bo'lim) | 405 | 401 |
 
-Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
+Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin boshqaning mahsulotini o'chira olmaydi. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
 
 Ro'yxat parametrlari:
 
-| Parametr | Misol | Vazifasi |
-| --- | --- | --- |
-| `search` | `?search=choy` | `name` va `description` bo'yicha qidirish |
-| `ordering` | `?ordering=-price` | `price`, `created_at`, `name` bo'yicha saralash |
-| `created_by` | `?created_by=4` | Yaratgan foydalanuvchi **id** si bo'yicha filtr (javobda `username` chiqsa ham) |
-| `page` | `?page=2` | Sahifa, har birida 10 ta |
+| Parametr     | Misol              | Vazifasi                                                                        |
+| ------------ | ------------------ | ------------------------------------------------------------------------------- |
+| `search`     | `?search=choy`     | `name` va `description` bo'yicha qidirish                                       |
+| `ordering`   | `?ordering=-price` | `price`, `created_at`, `name` bo'yicha saralash                                 |
+| `created_by` | `?created_by=4`    | Yaratgan foydalanuvchi **id** si bo'yicha filtr (javobda `username` chiqsa ham) |
+| `page`       | `?page=2`          | Sahifa, har birida 10 ta                                                        |
 
 ### 27.3. Nima uchun ikki xil serializer
 
-| | `ProductListSerializer` | `ProductDetailSerializer` |
-| --- | --- | --- |
-| Qachon | `list` | `retrieve`, `create`, `update`, `partial_update` |
-| Maydonlar | `id`, `name`, `price`, `image` | Hammasi |
-| Kim ko'radi | Hamma, anonim ham | Login qilganlar |
+|             | `ProductListSerializer`        | `ProductDetailSerializer`                        |
+| ----------- | ------------------------------ | ------------------------------------------------ |
+| Qachon      | `list`                         | `retrieve`, `create`, `update`, `partial_update` |
+| Maydonlar   | `id`, `name`, `price`, `image` | Hammasi                                          |
+| Kim ko'radi | Hamma, anonim ham              | Login qilganlar                                  |
 
 Ikki sabab bor:
 
@@ -1982,20 +1986,20 @@ def get_serializer_class(self):
 def get_permissions(self):
     if self.action == 'list':
         return [permissions.AllowAny()]
-    if self.action in ('update', 'partial_update', 'destroy'):
+    if self.action in ('update', 'partial_update'):
         return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
     return [permissions.IsAuthenticated()]
 ```
 
-| So'rov | `self.action` | Ruxsatlar |
-| --- | --- | --- |
-| `GET /api/products/` | `list` | `AllowAny` |
-| `GET /api/products/5/` | `retrieve` | `IsAuthenticated` |
-| `POST /api/products/` | `create` | `IsAuthenticated` |
-| `PUT /api/products/5/` | `update` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
-| `PATCH /api/products/5/` | `partial_update` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
-| `DELETE /api/products/5/` | `destroy` | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
-| `OPTIONS` va boshqalar | `metadata` va h.k. | `IsAuthenticated` |
+| So'rov                    | `self.action`      | Ruxsatlar                                   |
+| ------------------------- | ------------------ | ------------------------------------------- |
+| `GET /api/products/`      | `list`             | `AllowAny`                                  |
+| `GET /api/products/5/`    | `retrieve`         | `IsAuthenticated`                           |
+| `POST /api/products/`     | `create`           | `IsAuthenticated`                           |
+| `PUT /api/products/5/`    | `update`           | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `PATCH /api/products/5/`  | `partial_update`   | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
+| `DELETE /api/products/5/` | `None` (ulanmagan) | `IsAuthenticated`, keyin 405 |
+| `OPTIONS` va boshqalar    | `metadata` va h.k. | `IsAuthenticated`                           |
 
 - **Oxirgi qator ataylab eng qattiq emas, lekin yopiq:** keyin yangi action qo'shilib, ro'yxatga kiritish unutilsa, u tasodifan hammaga ochiq bo'lib qolmaydi.
 - **`has_permission` va `has_object_permission`:** `IsAuthenticated` so'rov boshida ishlaydi (anonim: `401`). `IsProductOwnerOrAdmin` esa `get_object()` chaqirilganda aniq mahsulot bilan ishlaydi (begona: `403`). Batafsil: 26.5-bo'lim.
@@ -2011,7 +2015,12 @@ curl "http://127.0.0.1:8000/api/products/?search=choy&ordering=-price"
 ```
 
 ```json
-{"count":1,"next":null,"previous":null,"results":[{"id":2,"name":"Qora choy","price":"15000.00","image":null}]}
+{
+	"count": 1,
+	"next": null,
+	"previous": null,
+	"results": [{ "id": 2, "name": "Qora choy", "price": "15000.00", "image": null }]
+}
 ```
 
 **Tafsilot, loginsiz** (`401`):
@@ -2021,7 +2030,7 @@ curl http://127.0.0.1:8000/api/products/2/
 ```
 
 ```json
-{"detail":"Login ma’lumotlari yuborilmagan."}
+{ "detail": "Login ma’lumotlari yuborilmagan." }
 ```
 
 **Token olish** (`200`):
@@ -2031,7 +2040,7 @@ curl -X POST http://127.0.0.1:8000/api/token/ -H "Content-Type: application/json
 ```
 
 ```json
-{"refresh":"eyJhbGciOiJIUzI1NiIs...","access":"eyJhbGciOiJIUzI1NiIs..."}
+{ "refresh": "eyJhbGciOiJIUzI1NiIs...", "access": "eyJhbGciOiJIUzI1NiIs..." }
 ```
 
 ```cmd
@@ -2045,13 +2054,23 @@ curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCE
 ```
 
 ```json
-{"id":2,"name":"Ko'k choy","description":"100 gramm","price":"12000.50","quantity":10,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.407003+05:00"}
+{
+	"id": 2,
+	"name": "Ko'k choy",
+	"description": "100 gramm",
+	"price": "12000.50",
+	"quantity": 10,
+	"image": null,
+	"created_by": "customer1",
+	"created_at": "2026-11-04T09:54:13.406985+05:00",
+	"updated_at": "2026-11-04T09:54:13.407003+05:00"
+}
 ```
 
 Manfiy narx (`400`):
 
 ```json
-{"price":["Qiymat 0 dan kichik bo‘lmasin."]}
+{ "price": ["Qiymat 0 dan kichik bo‘lmasin."] }
 ```
 
 **Rasm bilan qo'shish** (`201`). Bu yerda `-F` ishlatiladi, `Content-Type` ni curl o'zi qo'yadi:
@@ -2061,13 +2080,23 @@ curl -X POST http://127.0.0.1:8000/api/products/ -H "Authorization: Bearer %ACCE
 ```
 
 ```json
-{"id":3,"name":"Rasmli","description":"","price":"1000.00","quantity":0,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T09:54:13.798214+05:00","updated_at":"2026-11-04T09:54:13.798227+05:00"}
+{
+	"id": 3,
+	"name": "Rasmli",
+	"description": "",
+	"price": "1000.00",
+	"quantity": 0,
+	"image": "http://127.0.0.1:8000/media/products/rasm.png",
+	"created_by": "customer1",
+	"created_at": "2026-11-04T09:54:13.798214+05:00",
+	"updated_at": "2026-11-04T09:54:13.798227+05:00"
+}
 ```
 
 GIF yoki rasm bo'lmagan fayl (`400`):
 
 ```json
-{"image":["Faqat haqiqiy JPEG, PNG yoki WebP rasmini yuklang."]}
+{ "image": ["Faqat haqiqiy JPEG, PNG yoki WebP rasmini yuklang."] }
 ```
 
 **Tafsilot, login bilan** (`200`):
@@ -2077,7 +2106,17 @@ curl http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%"
 ```
 
 ```json
-{"id":2,"name":"Ko'k choy","description":"100 gramm","price":"12000.50","quantity":10,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.407003+05:00"}
+{
+	"id": 2,
+	"name": "Ko'k choy",
+	"description": "100 gramm",
+	"price": "12000.50",
+	"quantity": 10,
+	"image": null,
+	"created_by": "customer1",
+	"created_at": "2026-11-04T09:54:13.406985+05:00",
+	"updated_at": "2026-11-04T09:54:13.407003+05:00"
+}
 ```
 
 **PUT** (`200`). `name` va `price` majburiy:
@@ -2087,13 +2126,23 @@ curl -X PUT http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACC
 ```
 
 ```json
-{"id":2,"name":"Qora choy","description":"200 gramm","price":"15000.00","quantity":5,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.536807+05:00"}
+{
+	"id": 2,
+	"name": "Qora choy",
+	"description": "200 gramm",
+	"price": "15000.00",
+	"quantity": 5,
+	"image": null,
+	"created_by": "customer1",
+	"created_at": "2026-11-04T09:54:13.406985+05:00",
+	"updated_at": "2026-11-04T09:54:13.536807+05:00"
+}
 ```
 
 Majburiy maydonlarsiz (`400`):
 
 ```json
-{"name":["Ushbu maydon to'ldirilishi shart."],"price":["Ushbu maydon to'ldirilishi shart."]}
+{ "name": ["Ushbu maydon to'ldirilishi shart."], "price": ["Ushbu maydon to'ldirilishi shart."] }
 ```
 
 **PATCH** (`200`). Faqat yuborilgan maydon o'zgaradi:
@@ -2103,25 +2152,107 @@ curl -X PATCH http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %A
 ```
 
 ```json
-{"id":2,"name":"Qora choy","description":"200 gramm","price":"15000.00","quantity":3,"image":null,"created_by":"customer1","created_at":"2026-11-04T09:54:13.406985+05:00","updated_at":"2026-11-04T09:54:13.618749+05:00"}
+{
+	"id": 2,
+	"name": "Qora choy",
+	"description": "200 gramm",
+	"price": "15000.00",
+	"quantity": 3,
+	"image": null,
+	"created_by": "customer1",
+	"created_at": "2026-11-04T09:54:13.406985+05:00",
+	"updated_at": "2026-11-04T09:54:13.618749+05:00"
+}
 ```
 
-Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT`, `PATCH` va `DELETE` uchun (`403`):
+Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT` va `PATCH` uchun (`403`):
 
 ```json
-{"detail":"Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi."}
+{ "detail": "Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi." }
 ```
 
-**DELETE** (`204`, javob tanasi bo'sh):
+### 27.6. O'chirish qoidasi va "Mening mahsulotlarim"
+
+**Qoida:** mahsulotni faqat uni qo'shgan foydalanuvchi va faqat o'z profili orqali o'chira oladi. Admin roli va superuser boshqaning mahsulotini tahrirlay oladi (`PUT`, `PATCH`), lekin o'chira olmaydi.
+
+| Qayerdan | Egasi | Boshqa foydalanuvchi | `admin` roli | Superuser | Anonim |
+| --- | --- | --- | --- | --- | --- |
+| `DELETE /api/users/me/products/{id}/` | **204** | 404 | 404 | 404 | 401 |
+| `DELETE /api/products/{id}/` | 405 | 405 | 405 | 405 | 401 |
+| `/admin/` paneli | Panelga kirish huquqi bo'lsa ham 403 | Panelga kirish huquqi bo'lsa ham 403 | Panelga kirish huquqi bo'lsa ham 403 | 403 | Login sahifasi |
+
+Admin yoki superuserning o'zi qo'shgan mahsulot bo'lsa, ular ham uni o'z profilidan o'chiradi (204): bu yerda hal qiluvchi narsa rol emas, egalik.
+
+**Endpointlar** (`MyProductViewSet`, hammasi `IsAuthenticated`):
+
+| Metod | URL | Vazifasi | Javob | Xatolar |
+| --- | --- | --- | --- | --- |
+| GET | `/api/users/me/products/` | O'z mahsulotlari, to'liq maydonlar. `?search=`, `?ordering=`, `?page=` | 200 | 401 |
+| GET | `/api/users/me/products/{id}/` | O'z mahsuloti | 200 | 401, 404 |
+| DELETE | `/api/users/me/products/{id}/` | O'z mahsulotini va uning rasm faylini o'chiradi | 204 | 400, 401, 404 |
+
+**Nima uchun 403 emas, 404:**
+
+- `get_queryset` so'rovni boshidanoq `filter(created_by=request.user)` bilan cheklaydi. Boshqaning mahsuloti bu to'plamda umuman yo'q, shuning uchun "ruxsat yo'q" emas, "topilmadi" deyish to'g'ri.
+- 403 mahsulot **borligini** oshkor qilardi: `id` larni birma-bir sinab, nima borligini va nechta ekanini bilish mumkin bo'lardi. 404 da begona va mavjud bo'lmagan mahsulot javobi bir xil.
+- Tekshiruvni unutib qo'yish qiyin: alohida ruxsat klassi kerak emas, begona yozuv view'ga umuman yetib kelmaydi.
+
+**Nima uchun umumiy manzilda 405, anonimga esa 401:** `ProductViewSet` da `DestroyModelMixin` yo'q, shuning uchun `DELETE` ulanmagan. DRF esa avval autentifikatsiyani, keyin metodni tekshiradi: anonim birinchi tekshiruvda to'xtaydi (401), login qilgan foydalanuvchi ikkinchisida (405).
+
+**Rasm fayli:** `api/models.py` dagi `post_delete` signali faylni `transaction.on_commit` ichida o'chiradi. Baza o'zgarishi bekor qilinsa, fayl joyida qoladi. Fayl o'chmasa (masalan, band bo'lsa), xato logga yoziladi va foydalanuvchi 500 olmaydi. Rasmi almashtirilganda eski fayl hali ham diskda qoladi: signal faqat mahsulot o'chganda ishlaydi.
+
+**Admin panel:** `ProductAdmin.has_delete_permission` har doim `False`. O'chirish sahifasi 403 qaytaradi, Django esa `delete_selected` amalini shu huquqqa qarab ro'yxatdan o'zi olib tashlaydi. Bu superuserga ham taalluqli.
+
+> **Oqibat:** egasi hisobini o'chirsa (26.4-bo'lim) yoki unga kira olmasa, uning mahsulotlarini API va admin panel orqali hech kim o'chira olmaydi. Ular ochiq ro'yxatda qolaveradi. Admin faqat matnini tahrirlay oladi yoki `python manage.py shell` dan foydalanadi.
+
+#### CMD uchun curl misollari
+
+Javoblar shu buyruqlarni CMD orqali bajarib olingan (bazaning nusxasida).
+
+**Mening mahsulotlarim** (`200`):
 
 ```cmd
-curl -X DELETE http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %ACCESS%"
+curl "http://127.0.0.1:8000/api/users/me/products/?search=choy&ordering=-price" -H "Authorization: Bearer %ACCESS%"
 ```
 
-Shundan keyin tafsilot (`404`):
+```json
+{"count":1,"next":null,"previous":null,"results":[{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}]}
+```
+
+Loginsiz (`401`):
+
+```json
+{"detail":"Login ma’lumotlari yuborilmagan."}
+```
+
+**Bitta mahsulotim** (`200`):
+
+```cmd
+curl http://127.0.0.1:8000/api/users/me/products/3/ -H "Authorization: Bearer %ACCESS%"
+```
+
+```json
+{"id":3,"name":"Rasmli choy","description":"100 gramm","price":"12000.00","quantity":5,"image":"http://127.0.0.1:8000/media/products/rasm.png","created_by":"customer1","created_at":"2026-11-04T10:31:20.460355+05:00","updated_at":"2026-11-04T10:31:20.460367+05:00"}
+```
+
+**O'chirish** (`204`, javob tanasi bo'sh; rasm fayli ham o'chadi):
+
+```cmd
+curl -X DELETE http://127.0.0.1:8000/api/users/me/products/3/ -H "Authorization: Bearer %ACCESS%"
+```
+
+Boshqaning mahsuloti, mavjud bo'lmagan yoki allaqachon o'chirilgan mahsulot: javob bir xil (`404`):
 
 ```json
 {"detail":"Yozuv topilmadi."}
 ```
 
-> Mahsulot o'chirilganda yoki rasmi almashtirilganda eski fayl `media/products/` da qoladi: Django fayllarni o'zi o'chirmaydi.
+**Umumiy manzil orqali o'chirishga urinish** (`405`, hamma uchun, egasi uchun ham):
+
+```cmd
+curl -X DELETE http://127.0.0.1:8000/api/products/3/ -H "Authorization: Bearer %ACCESS%"
+```
+
+```json
+{"detail":"«DELETE» metodi ruxsat etilmagan."}
+```

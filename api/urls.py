@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     BookViewSet, CategoryViewSet, ChangePasswordAPIView, DailyReportView, LogoutView, MenuItemViewSet, MenuView,
-    OrderStatusEventViewSet, OrderViewSet, ProductViewSet, ProfileViewSet, RegisterAPIView, ReservationViewSet,
+    MyProductViewSet, OrderStatusEventViewSet, OrderViewSet, ProductViewSet, ProfileViewSet, RegisterAPIView, ReservationViewSet,
     RestaurantSettingsView, TableViewSet, UserDetailAPIView, UserListAPIView, UserUpdateAPIView,
 )
 
@@ -27,5 +27,7 @@ urlpatterns = [
     path('auth/change-password/', ChangePasswordAPIView.as_view()),
     path('users/', UserListAPIView.as_view()),
     path('users/me/', UserUpdateAPIView.as_view()),
+    path('users/me/products/', MyProductViewSet.as_view({'get': 'list'})),
+    path('users/me/products/<int:pk>/', MyProductViewSet.as_view({'get': 'retrieve', 'delete': 'destroy'})),
     path('users/<int:pk>/', UserDetailAPIView.as_view()),
 ] + router.urls

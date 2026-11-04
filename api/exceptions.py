@@ -39,6 +39,7 @@ PATTERNS = [
     (re.compile(r"^Token has no '(.+)' claim$"), r'Tokenda «\1» maydoni yo‘q.'),
     (re.compile(r"^Token '(.+)' claim has expired$"), r'Tokenning «\1» maydoni muddati o‘tgan.'),
     (re.compile(r'^No .+ matches the given query\.$'), 'Yozuv topilmadi.'),
+    (re.compile(r'^Method "(.+)" not allowed\.$'), r'«\1» metodi ruxsat etilmagan.'),
     (re.compile(r'^Ensure this value is greater than or equal to (.+)\.$'), r'Qiymat \1 dan kichik bo‘lmasin.'),
 ]
 

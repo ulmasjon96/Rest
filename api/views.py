@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import Count, Prefetch, ProtectedError, Sum
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiResponse, extend_schema, extend_schema_view
-from rest_framework import generics, permissions, status as http_status, viewsets
+from rest_framework import generics, mixins, permissions, status as http_status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
@@ -68,9 +68,15 @@ class BookViewSet(viewsets.ModelViewSet):
     create=extend_schema(summary='Mahsulot qo‘shish (login qilganlar)', tags=['products']),
     update=extend_schema(summary='Mahsulotni to‘liq tahrirlash (egasi yoki admin)', tags=['products']),
     partial_update=extend_schema(summary='Mahsulotni qisman tahrirlash (egasi yoki admin)', tags=['products']),
-    destroy=extend_schema(summary='Mahsulotni o‘chirish (egasi yoki admin)', tags=['products']),
 )
-class ProductViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
+class ProductViewSet(
+    mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """DestroyModelMixin ataylab yo'q: bu manzilda DELETE hamma uchun 405.
+
+    O'chirish faqat MyProductViewSet orqali, egasining o'zi tomonidan.
+    """
     # '-id': bir vaqtda yaratilganlar ham sahifalarda barqaror tartibda chiqadi.
     queryset = Product.objects.select_related('created_by').order_by('-created_at', '-id')
     search_fields = ['name', 'description']
@@ -80,7 +86,7 @@ class ProductViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action == 'list':
             return [permissions.AllowAny()]
-        if self.action in ('update', 'partial_update', 'destroy'):
+        if self.action in ('update', 'partial_update'):
             return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
         # retrieve, create va boshqa har qanday amal (OPTIONS ham): yangi action tasodifan ochiq qolmaydi.
         return [permissions.IsAuthenticated()]
@@ -90,6 +96,27 @@ class ProductViewSet(ProtectedDestroyMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+
+@extend_schema_view(
+    list=extend_schema(summary='Mening mahsulotlarim', tags=['users']),
+    retrieve=extend_schema(summary='Mening mahsulotim', tags=['users']),
+    destroy=extend_schema(summary='O‘z mahsulotimni o‘chirish', tags=['users']),
+)
+class MyProductViewSet(
+    ProtectedDestroyMixin, mixins.ListModelMixin, mixins.RetrieveModelMixin, mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Faqat o'z mahsulotlari: boshqaning mahsuloti hamma uchun, admin va superuser uchun ham 404."""
+    serializer_class = ProductDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    search_fields = ['name', 'description']
+    ordering_fields = ['price', 'created_at', 'name']
+
+    def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):   # Swagger sxemasida foydalanuvchi anonim
+            return Product.objects.none()
+        return Product.objects.select_related('created_by').filter(created_by=self.request.user).order_by('-created_at', '-id')
 
 
 # ---------- Foydalanuvchilar va JWT ----------

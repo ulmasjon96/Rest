@@ -1,5 +1,6 @@
 import base64
 import io
+import os
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 
@@ -1659,7 +1660,6 @@ class ProductAPITests(APITestCase):
         for response in (
             self.client.put(self.detail_url, self.valid_payload(), format='json'),
             self.client.patch(self.detail_url, {'name': 'Buzildi'}, format='json'),
-            self.client.delete(self.detail_url),
         ):
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
             self.assertEqual(response.data['detail'], 'Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi.')
@@ -1708,10 +1708,15 @@ class ProductAPITests(APITestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.created_by, self.owner)
 
-    def test_owner_delete(self):
-        self.client.force_authenticate(user=self.owner)
-        self.assertEqual(self.client.delete(self.detail_url).status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+    def test_delete_on_public_url_is_405_for_everyone(self):
+        for user in (self.owner, self.other, self.admin, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                response = self.client.delete(self.detail_url)
+                self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+                self.assertNotIn('DELETE', response.headers['Allow'])
+                self.assertEqual(response.data['detail'], '«DELETE» metodi ruxsat etilmagan.')
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
 
     # --- Admin ---
 
@@ -1724,7 +1729,8 @@ class ProductAPITests(APITestCase):
                 response = self.client.patch(url, {'name': 'Admin tahriri'}, format='json')
                 self.assertEqual(response.status_code, status.HTTP_200_OK)
                 self.assertEqual(response.data['created_by'], 'owner')   # egasi o'zgarmaydi
-                self.assertEqual(self.client.delete(url).status_code, status.HTTP_204_NO_CONTENT)
+                product.refresh_from_db()
+                self.assertEqual(product.name, 'Admin tahriri')
 
     # --- Validatsiya ---
 
@@ -1833,6 +1839,195 @@ class ProductAPITests(APITestCase):
     def test_creator_with_products_is_protected(self):
         with self.assertRaises(ProtectedError):
             self.owner.delete()
+
+
+class MyProductTests(APITestCase):
+    URL = '/api/users/me/products/'
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.owner = User.objects.create_user('owner', password='x')
+        cls.other = User.objects.create_user('other', password='x')
+        cls.admin = User.objects.create_user('boss', password='x')
+        Profile.objects.create(user=cls.admin, role=Profile.ADMIN)
+        cls.root = User.objects.create_superuser('root', password='x')
+        cls.mine = Product.objects.create(name='Asal', description='Tog‘ asali', price=Decimal('90000'), created_by=cls.owner)
+        cls.mine2 = Product.objects.create(name='Zira', price=Decimal('100'), created_by=cls.owner)
+        cls.foreign = Product.objects.create(name='Begona', price=Decimal('5'), created_by=cls.other)
+
+    def url(self, product):
+        return f'{self.URL}{product.pk}/'
+
+    def names(self, **params):
+        return [p['name'] for p in self.client.get(self.URL, params).data['results']]
+
+    def image_upload(self):
+        buffer = io.BytesIO()
+        Image.new('RGB', (2, 2)).save(buffer, format='PNG')
+        return SimpleUploadedFile('a.png', buffer.getvalue(), 'image/png')
+
+    def test_anonymous_rejected(self):
+        self.assertEqual(self.client.get(self.URL).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.get(self.url(self.mine)).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertEqual(self.client.delete(self.url(self.mine)).status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertTrue(Product.objects.filter(pk=self.mine.pk).exists())
+
+    def test_list_shows_only_own_with_full_fields(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(self.URL)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['count'], 2)
+        self.assertEqual({p['name'] for p in response.data['results']}, {'Asal', 'Zira'})
+        self.assertIn('quantity', response.data['results'][0])
+        self.assertEqual(response.data['results'][0]['created_by'], 'owner')
+
+    def test_admin_list_is_also_only_own(self):
+        for user in (self.admin, self.root):
+            self.client.force_authenticate(user=user)
+            self.assertEqual(self.names(), [])
+
+    def test_search_ordering_pagination(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(self.names(search='asal'), ['Asal'])
+        self.assertEqual(self.names(search='Begona'), [])
+        self.assertEqual(self.names(ordering='price'), ['Zira', 'Asal'])
+        self.assertEqual(self.names(ordering='-price'), ['Asal', 'Zira'])
+        for number in range(10):
+            Product.objects.create(name=f'P{number}', price=Decimal('1'), created_by=self.owner)
+        first = self.client.get(self.URL).data
+        self.assertEqual(first['count'], 12)
+        self.assertEqual(len(first['results']), 10)
+        self.assertEqual(len(self.client.get(self.URL, {'page': 2}).data['results']), 2)
+
+    def test_retrieve_own(self):
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(self.url(self.mine))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['description'], 'Tog‘ asali')
+
+    def test_foreign_product_is_404_for_everyone(self):
+        for user in (self.owner, self.admin, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                url = self.url(self.foreign)
+                self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+                self.assertEqual(self.client.delete(url).status_code, status.HTTP_404_NOT_FOUND)
+        self.assertTrue(Product.objects.filter(pk=self.foreign.pk).exists())
+
+    def test_foreign_and_missing_products_look_the_same(self):
+        self.client.force_authenticate(user=self.owner)
+        foreign = self.client.delete(self.url(self.foreign))
+        missing = self.client.delete(f'{self.URL}999999/')
+        self.assertEqual(foreign.status_code, missing.status_code)
+        self.assertEqual(foreign.data, missing.data)
+
+    def test_owner_deletes_own(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(self.client.delete(self.url(self.mine)).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Product.objects.filter(pk=self.mine.pk).exists())
+        self.assertTrue(Product.objects.filter(pk=self.mine2.pk).exists())
+        self.assertEqual(self.client.delete(self.url(self.mine)).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_superuser_deletes_only_own_product(self):
+        product = Product.objects.create(name='Rootniki', price=Decimal('1'), created_by=self.root)
+        self.client.force_authenticate(user=self.root)
+        self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_no_write_methods(self):
+        self.client.force_authenticate(user=self.owner)
+        self.assertEqual(self.client.post(self.URL, {'name': 'X', 'price': '1'}, format='json').status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertEqual(self.client.patch(self.url(self.mine), {'name': 'X'}, format='json').status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_protected_error_is_400(self):
+        self.client.force_authenticate(user=self.owner)
+        with mock.patch.object(Product, 'delete', side_effect=ProtectedError('x', set())):
+            response = self.client.delete(self.url(self.mine))
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('o‘chirib bo‘lmaydi', response.data['detail'])
+
+    def test_delete_removes_image_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            response = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload()}, format='multipart')
+            self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+            product = Product.objects.get(pk=response.data['id'])
+            path = product.image.path
+            self.assertTrue(path.startswith(media))
+            self.assertTrue(os.path.exists(path))
+
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_204_NO_CONTENT)
+            self.assertFalse(os.path.exists(path))
+
+    def test_failed_attempts_keep_image_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            response = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload()}, format='multipart')
+            product = Product.objects.get(pk=response.data['id'])
+            path = product.image.path
+
+            self.client.force_authenticate(user=self.root)
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertEqual(self.client.delete(self.url(product)).status_code, status.HTTP_404_NOT_FOUND)
+                self.assertEqual(self.client.delete(f'/api/products/{product.pk}/').status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+            self.assertTrue(os.path.exists(path))
+
+    def test_rolled_back_delete_keeps_image_file(self):
+        with tempfile.TemporaryDirectory() as media, override_settings(MEDIA_ROOT=media):
+            self.client.force_authenticate(user=self.owner)
+            response = self.client.post('/api/products/', {'name': 'Rasmli', 'price': '1', 'image': self.image_upload()}, format='multipart')
+            product = Product.objects.get(pk=response.data['id'])
+            path = product.image.path
+
+            with self.captureOnCommitCallbacks(execute=True):
+                with self.assertRaises(ValueError), transaction.atomic():
+                    product.delete()
+                    raise ValueError
+            self.assertTrue(os.path.exists(path))
+            self.assertTrue(Product.objects.filter(name='Rasmli').exists())
+
+    def test_product_without_image_deletes_cleanly(self):
+        self.client.force_authenticate(user=self.owner)
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            self.assertEqual(self.client.delete(self.url(self.mine)).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(callbacks, [])
+
+    def test_schema_has_expected_methods(self):
+        schema = self.client.get('/api/schema/', {'format': 'json'}).data['paths']
+        self.assertNotIn('delete', schema['/api/products/{id}/'])
+        self.assertEqual(set(schema['/api/users/me/products/{id}/']), {'get', 'delete'})
+        self.assertEqual(schema['/api/users/me/products/{id}/']['delete']['tags'], ['users'])
+
+
+class ProductAdminDeleteTests(APITestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.root = User.objects.create_superuser('root', password='x')
+        cls.product = Product.objects.create(name='Non', price=Decimal('1'), created_by=cls.root)
+
+    def setUp(self):
+        self.client.force_login(self.root)
+
+    def test_delete_page_is_403_even_for_own_product(self):
+        url = reverse('admin:api_product_delete', args=[self.product.pk])
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(self.client.post(url, {'post': 'yes'}).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_delete_selected_action_is_gone(self):
+        url = reverse('admin:api_product_changelist')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContains(response, 'delete_selected')
+
+        # Formani qo'lda yuborish ham ishlamaydi.
+        self.client.post(url, {'action': 'delete_selected', '_selected_action': [self.product.pk], 'post': 'yes'})
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_change_page_has_no_delete_link(self):
+        response = self.client.get(reverse('admin:api_product_change', args=[self.product.pk]))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotContains(response, 'deletelink')
 
 
 class SeedTests(APITestCase):
