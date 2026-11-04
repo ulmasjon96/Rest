@@ -55,7 +55,7 @@ INSTALLED_APPS = [
     'corsheaders',                # CORS
     'drf_spectacular',            # Swagger
     'api',                        # bizning app
-    'clinic',                     # Medora Clinic modellari
+    'restaurant',                 # restoran modellari
 ]
 
 # Qaysi frontend manzillariga API'dan foydalanishga ruxsat beriladi
@@ -96,12 +96,13 @@ REST_FRAMEWORK = {
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
-# Swagger: status va previous_status bir xil choices'dan foydalanadi,
-# shuning uchun sxemada bitta umumiy enum nomi beriladi.
+# Swagger: bron va buyurtma holatlari ikkalasi ham 'status' deb nomlangan,
+# shuning uchun sxemada ularga alohida enum nomlari beriladi.
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Medora Clinic API',
+    'TITLE': 'Restoran API',
     'ENUM_NAME_OVERRIDES': {
-        'AppointmentStatusEnum': 'clinic.models.Appointment.STATUSES',
+        'OrderStatusEnum': 'restaurant.models.Order.STATUSES',
+        'ReservationStatusEnum': 'restaurant.models.Reservation.STATUSES',
     },
 }
 

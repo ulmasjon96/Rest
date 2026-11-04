@@ -1,6 +1,8 @@
-# Rest — Django REST Framework loyihasi
+# Rest — Restoran API (Django REST Framework)
 
 Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har bir buyruq, har bir kod qatori, o'rnatilgan paketlar, chiqqan xatolar va ularning qanday tuzatilgani tushuntirib yozilgan.
+
+**Hozirgi holat:** restoran API'si: menyu, stollar, bron, buyurtma, rollar va kunlik hisobot (17–24-bo'limlar). `Book` API o'quv namunasi sifatida qolgan.
 
 ---
 
@@ -21,10 +23,16 @@ Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har
 13. [Boshqa kompyuterda ishga tushirish](#13-boshqa-kompyuterda-ishga-tushirish)
 14. [Buyruqlar qisqa jadvali](#14-buyruqlar-qisqa-jadvali)
 15. [Xulosa va tavsiyalar](#15-xulosa-va-tavsiyalar)
-16. [Clinic app](#16-clinic-app)
-17. [2026-11-02: bajarilgan ishlar va git muammosi](#17-2026-11-02-bajarilgan-ishlar-va-git-muammosi)
-18. [Clinic API](#18-clinic-api)
-19. [.env sozlamalari](#19-env-sozlamalari)
+16. [.env sozlamalari](#16-env-sozlamalari)
+17. [Restoran: modellar va bog'lanishlar](#17-restoran-modellar-va-boglanishlar)
+18. [Rollar jadvali](#18-rollar-jadvali)
+19. [Endpointlar](#19-endpointlar)
+20. [Validatsiyalar](#20-validatsiyalar)
+21. [Buyurtma holatlari](#21-buyurtma-holatlari)
+22. [Misol so'rov va javoblar](#22-misol-sorov-va-javoblar)
+23. [Namuna ma'lumot (seed)](#23-namuna-malumot-seed)
+24. [Testlarni ishga tushirish](#24-testlarni-ishga-tushirish)
+25. [Tarix: klinikadan restoranga o'tish](#25-tarix-klinikadan-restoranga-otish)
 
 ---
 
@@ -37,7 +45,7 @@ Bu hujjatda loyihani noldan ishga tushirishgacha qilingan barcha ishlar bor: har
 | Python versiyasi   | **3.13** (dastlab 3.15 edi, 10.1-bo'limga qarang) |
 | Virtual muhit      | `env`                                             |
 | Django loyihasi    | `config`                                          |
-| Django app         | `api`                                             |
+| Django app'lar     | `api` (API kodi), `restaurant` (modellar, admin)  |
 | Ma'lumotlar bazasi | SQLite (`db.sqlite3`)                             |
 | Superuser          | `admin`                                           |
 
@@ -175,7 +183,7 @@ python manage.py startapp api
 
 ## 6. Sozlamalar — `config/settings.py`
 
-> Yangilanish (2026-11-02): `SECRET_KEY`, `DEBUG` va `ALLOWED_HOSTS` endi `.env` faylidan o'qiladi, `LANGUAGE_CODE = 'uz'`, `TIME_ZONE = 'Asia/Tashkent'`. 19-bo'limga qarang.
+> Yangilanish (2026-11-02): `SECRET_KEY`, `DEBUG` va `ALLOWED_HOSTS` endi `.env` faylidan o'qiladi, `LANGUAGE_CODE = 'uz'`, `TIME_ZONE = 'Asia/Tashkent'`. 16-bo'limga qarang.
 
 ### 6.1. INSTALLED_APPS
 
@@ -193,6 +201,7 @@ INSTALLED_APPS = [
     'corsheaders',                   # CORS
     'drf_spectacular',               # Swagger
     'api',                           # bizning app
+    'restaurant',                    # restoran modellari
 ]
 ```
 
@@ -635,6 +644,7 @@ Username (leave blank to use 'user'): python manage.py runserver
 | `http://127.0.0.1:8000/api/`         | API asosiy sahifasi (DefaultRouter)     |
 | `http://127.0.0.1:8000/api/books/`   | Kitoblar ro'yxati, DRF brauzer sahifasi |
 | `http://127.0.0.1:8000/api/books/1/` | Bitta kitob                             |
+| `http://127.0.0.1:8000/api/menu/`    | Restoran menyusi (ochiq)                |
 | `http://127.0.0.1:8000/api/docs/`    | Swagger hujjatlari                      |
 | `http://127.0.0.1:8000/api/schema/`  | OpenAPI sxemasi (YAML)                  |
 | `http://127.0.0.1:8000/api/token/`   | JWT token olish                         |
@@ -700,23 +710,24 @@ Rest/
 │   ├── admin.py             # admin panel sozlamasi
 │   ├── apps.py              # app konfiguratsiyasi
 │   ├── models.py            # Book modeli
-│   ├── serializers.py       # Book va clinic serializer'lari (qo'lda yaratilgan)
-│   ├── urls.py              # router: books + 11 ta clinic resursi + clinic-settings
-│   ├── views.py             # BookViewSet, IsStaffOrReadOnly, clinic view'lari
-│   └── tests.py             # testlar uchun
-├── clinic/                  # Medora Clinic app'i (16-bo'lim)
+│   ├── permissions.py       # rollar va ruxsat klasslari
+│   ├── serializers.py       # Book va restoran serializer'lari (qo'lda yaratilgan)
+│   ├── urls.py              # router va settings/, menu/, reports/daily/
+│   ├── views.py             # BookViewSet va restoran view'lari
+│   └── tests.py             # avtomatik testlar (24-bo'lim)
+├── restaurant/              # restoran app'i (17-bo'lim)
+│   ├── management/commands/
+│   │   └── seed_restaurant.py  # namuna ma'lumot (23-bo'lim)
 │   ├── migrations/
 │   │   ├── __init__.py
-│   │   └── 0001_initial.py  # klinika jadvallari migratsiyasi
+│   │   └── 0001_initial.py  # restoran jadvallari migratsiyasi
 │   ├── __init__.py
-│   ├── admin.py             # klinika admin sozlamalari
+│   ├── admin.py             # admin sozlamalari
 │   ├── apps.py
-│   ├── models.py            # 15 ta model (14 ta jadval + 1 proxy)
-│   ├── tests.py
-│   └── views.py
+│   └── models.py            # 9 ta model
 ├── media/                   # yuklangan rasmlar (GitHub'ga yuklanmaydi, birinchi yuklashda paydo bo'ladi)
 ├── .gitignore               # git e'tiborsiz qoldiradigan fayllar
-├── .env                     # maxfiy sozlamalar (GitHub'ga yuklanmaydi, 19-bo'lim)
+├── .env                     # maxfiy sozlamalar (GitHub'ga yuklanmaydi, 16-bo'lim)
 ├── .env.example             # .env namunasi (GitHub'ga yuklanadi)
 ├── db.sqlite3               # SQLite bazasi
 ├── manage.py                # boshqaruv buyruqlari
@@ -745,7 +756,7 @@ media/
 | `__pycache__/`, `*.pyc` | Python avtomatik yaratadigan kesh fayllari              |
 | `db.sqlite3`            | Mahalliy baza                                           |
 | `.env`                  | Maxfiy kalitlar va parollar                             |
-| `media/`                | Foydalanuvchilar yuklagan rasmlar (logotip, shifokor fotosurati). Ular kod emas, ma'lumot hisoblanadi |
+| `media/`                | Foydalanuvchilar yuklagan rasmlar (logotip, taom rasmi). Ular kod emas, ma'lumot hisoblanadi |
 
 ---
 
@@ -760,6 +771,7 @@ pip install -r requirements.txt
 copy .env.example .env
 python manage.py migrate
 python manage.py createsuperuser
+python manage.py seed_restaurant
 python manage.py runserver
 ```
 
@@ -784,6 +796,8 @@ python manage.py runserver
 | `python manage.py runserver`         | Serverni ishga tushirish                 |
 | `python manage.py shell`             | Django muhitida Python konsolini ochish  |
 | `python manage.py showmigrations`    | Migratsiyalar holatini ko'rish           |
+| `python manage.py seed_restaurant`   | Namuna ma'lumot yaratish                 |
+| `python manage.py test`              | Testlarni ishga tushirish                |
 | `Ctrl + C`                           | Server yoki buyruqni to'xtatish          |
 | `dir`                                | Papka ichidagi fayllarni ko'rish (CMD)   |
 
@@ -800,6 +814,7 @@ python manage.py runserver
 - `Book` modeli, serializer, ViewSet, router va admin sozlamasi yozildi.
 - Migratsiyalar qo'llandi va `admin` superuser yaratildi.
 - 3 ta xato aniqlanib, tuzatildi.
+- Loyiha klinikadan restoranga o'tkazildi (25-bo'lim).
 
 **Tavsiyalar:**
 
@@ -812,827 +827,11 @@ python manage.py runserver
 
 ---
 
-## 16. Clinic app
-
-`clinic` app'i **Medora Clinic** ning ma'lumotlar tuzilmasini saqlaydi: klinika sozlamalari, bo'limlar, xonalar, shifokorlar va ularning ish jadvali, bemorlar, qabullar, qabul tarixi va audit jurnali. Hozircha faqat **modellar va admin panel** tayyor. API (serializer, view, url) keyin yoziladi.
-
-```cmd
-python manage.py startapp clinic
-```
-
-`config/settings.py` dagi o'zgarishlar:
-
-```python
-INSTALLED_APPS = [
-    ...
-    'api',
-    'clinic',                     # Medora Clinic modellari
-]
-
-MEDIA_URL = '/media/'             # yuklangan fayllar shu manzil orqali ochiladi
-MEDIA_ROOT = BASE_DIR / 'media'   # yuklangan fayllar shu papkada saqlanadi
-```
-
-`config/urls.py` oxiriga:
-
-```python
-from django.conf import settings
-from django.conf.urls.static import static
-
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-```
-
-| Sozlama / qator | Vazifasi |
-| --- | --- |
-| `MEDIA_URL` | Brauzerdagi manzil prefiksi, masalan `http://127.0.0.1:8000/media/doctors/ali.jpg`. |
-| `MEDIA_ROOT` | Diskdagi papka: `Rest\media\`. `ImageField(upload_to='doctors/')` faylni `media\doctors\` ga saqlaydi. |
-| `static(...)` | Ishlab chiqishda `/media/...` so'rovlariga faylni Django o'zi beradi. `DEBUG = False` bo'lganda bu ishlamaydi, serverda bu ishni nginx bajaradi. |
-
-> `static` va `media` farqi: **static** — dasturchi yozgan CSS, JS va rasmlar (kod bilan birga keladi). **media** — foydalanuvchi yuklagan fayllar (dastur ishlayotganda paydo bo'ladi).
-
-> **Hali yo'q narsalar (ataylab):** `Appointment.source_visit` maydoni va `clinical_models.py` (`VisitCard` va boshqalar) keyingi bosqichda qo'shiladi.
-
-### 16.1. Modellar ro'yxati
-
-| Model | Jadval | Vazifasi |
-| --- | --- | --- |
-| `Timestamped` | — (abstract) | Boshqa modellarga `created_at` va `updated_at` maydonlarini beradi |
-| `ClinicSettings` | `clinic_clinicsettings` | Klinikaning umumiy sozlamalari, **faqat bitta yozuv** |
-| `Profile` | `clinic_profile` | Foydalanuvchi hisobining roli: administrator, registrator, shifokor yoki bemor |
-| `Department` | `clinic_department` | Bo'lim (masalan, Terapiya, Kardiologiya) |
-| `Room` | `clinic_room` | Bo'limga tegishli xona va qavat |
-| `Specialty` | `clinic_specialty` | Mutaxassislik (masalan, Kardiolog) |
-| `Doctor` | `clinic_doctor` | Shifokor |
-| `WorkHour` | `clinic_workhour` | Shifokorning haftalik ish vaqti va tanaffusi |
-| `DayOff` | `clinic_dayoff` | Shifokorning ta'til yoki ishlamaydigan kuni |
-| `Patient` | `clinic_patient` | Bemor |
-| `Appointment` | `clinic_appointment` | Qabul: shifokor, bemor, vaqt va holat |
-| `AppointmentStatusEvent` | `clinic_appointmentstatusevent` | Qabul holati o'zgarishlari tarixi |
-| `DirectionEvent` | `clinic_directionevent` | Bemorni yo'naltirish bosqichlari tarixi |
-| `Audit` | `clinic_audit` | Kim, qachon, qanday amal bajarganining jurnali |
-| `AppointmentHistory` | — (proxy, `clinic_audit` jadvali) | Audit jurnalining faqat qabullarga oid qismi |
-| `LoginAttempt` | `clinic_loginattempt` | Noto'g'ri login urinishlarini sanash |
-
-### 16.2. Yordamchi kodlar
-
-#### `validate_photo(value)` — rasm validatori
-
-U `ClinicSettings.logo` va `Doctor.photo` maydonlariga `validators=[validate_photo]` orqali ulangan va quyidagilarni tekshiradi:
-
-| Tekshiruv | Kod | Xato matni |
-| --- | --- | --- |
-| Hajm 3 MB dan oshmasin | `value.size > 3 * 1024 * 1024` | `Rasm 3 MB dan kichik bo'lishi kerak.` |
-| Fayl haqiqatan rasm bo'lsin | `Image.open(value)` (Pillow) | `Faqat haqiqiy JPEG, PNG yoki WebP rasmini yuklang.` |
-| Format faqat JPEG, PNG yoki WebP bo'lsin | `im.format not in (...)` → `ValueError` | xuddi shu |
-| Fayl buzilmagan bo'lsin | `im.verify()` | xuddi shu |
-
-- **Nega kengaytma emas, mazmun tekshiriladi:** `virus.exe` ni `rasm.jpg` deb qayta nomlash oson. Pillow faylning ichini o'qiydi, shuning uchun soxta rasm o'tmaydi.
-- `value.seek(0)`: Pillow faylni o'qib, "kursor"ni oxiriga surib qo'yadi. Kursor boshiga qaytarilmasa, Django keyin bo'sh fayl saqlab qo'yishi mumkin.
-- `try/except Exception`: har qanday xatoni (buzilgan fayl, noto'g'ri format) bitta tushunarli `ValidationError` ga aylantiradi.
-- `from PIL import Image` funksiya ichida import qilingan, ya'ni Pillow faqat rasm tekshirilayotganda yuklanadi.
-
-#### `Timestamped` — abstract model
-
-```python
-created_at = models.DateTimeField(default=timezone.now, editable=False)
-updated_at = models.DateTimeField(auto_now=True)
-class Meta:
-    abstract = True
-```
-
-- `abstract = True`: bu model uchun **jadval yaratilmaydi**. Undan meros olgan har bir model (`class Doctor(Timestamped)`) bu ikki maydonni o'z jadvaliga oladi. Shu tufayli bir xil kodni 9 marta yozish shart emas.
-- `default=timezone.now`: `auto_now_add=True` dan farqi shuki, kerak bo'lsa kodda vaqtni qo'lda berish mumkin (masalan, eski ma'lumotlarni import qilganda). `editable=False` esa maydonni formalarda ko'rsatmaydi.
-- `auto_now=True`: har `save()` da joriy vaqt yoziladi.
-
-`Timestamped` dan meros oladigan modellar: `ClinicSettings`, `Profile`, `Department`, `Room`, `Specialty`, `Doctor`, `WorkHour`, `DayOff`, `Patient`. `Appointment` va tarix modellarida bu maydonlar alohida yozilgan.
-
-#### `default_duration()` — dinamik standart qiymat
-
-```python
-def default_duration():
-    return ClinicSettings.load().default_duration
-```
-
-Bu funksiya `Doctor.duration` ning standart qiymatini beradi. `default=30` deb qotirib yozish o'rniga **funksiya** berilgan (qavssiz: `default=default_duration`), shuning uchun har yangi shifokor yaratilganda qiymat klinika sozlamalaridan o'qiladi. Sozlamalar hali kiritilmagan bo'lsa, `load()` saqlanmagan standart obyektni qaytaradi va natija `30` bo'ladi.
-
-> Diqqat: migratsiya fayli bu funksiyaga `clinic.models.default_duration` deb murojaat qiladi. Funksiya nomini o'zgartirsangiz yoki uni o'chirsangiz, migratsiyalar buziladi.
-
-### 16.3. Modellar batafsil
-
-#### `ClinicSettings` — klinika sozlamalari
-
-| Maydon | Turi | Standart | Cheklov | Ma'nosi |
-| --- | --- | --- | --- | --- |
-| `name` | CharField(150) | `Medora Clinic` | | Klinika nomi |
-| `logo` | ImageField | bo'sh | `validate_photo` | Logotip, `media/clinic/` ga saqlanadi |
-| `phone`, `address` | CharField | bo'sh | | Aloqa ma'lumotlari |
-| `opens_at`, `closes_at` | TimeField | 08:00, 18:00 | `clean()` | Klinikaning umumiy ish vaqti |
-| `default_duration` | PositiveSmallInteger | 30 | 5–240 | Standart qabul davomiyligi (daqiqa) |
-| `booking_days` | PositiveSmallInteger | 90 | 1–365 | Necha kun oldindan band qilish mumkinligi |
-| `cancellation_hours` | PositiveSmallInteger | 0 | 0–168 | Bemor qabulni necha soat oldin bekor qila olishi (0 = cheklov yo'q) |
-| `offer_minutes` | PositiveSmallInteger | 15 | 1–1440 | Kutish taklifining amal qilish muddati |
-| `document_max_mb` | PositiveSmallInteger | 10 | 1–50 | Tibbiy fayllar uchun hajm limiti |
-
-`MinValueValidator` va `MaxValueValidator` qiymat chegaradan chiqsa, formada xato ko'rsatadi.
-
-`clean()`: `opens_at >= closes_at` bo'lsa, `Klinika ish tugashi boshlanishidan keyin bo'lsin.` xatosi chiqadi.
-
-#### `Profile` — hisob roli
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `user` | OneToOne → User, **CASCADE** | Har foydalanuvchida ko'pi bilan bitta profil bo'ladi |
-| `role` | CharField, choices | `admin`, `reception`, `doctor`, `patient` (standart: `patient`) |
-
-`clean()`: foydalanuvchi `Doctor` ga bog'langan bo'lsa, roli `doctor` bo'lishi shart. `Patient` ga bog'langan bo'lsa, roli `patient` bo'lishi shart. Bu ziddiyatli holatning (masalan, shifokor hisobida "bemor" roli) oldini oladi.
-
-#### `Department` — bo'lim
-
-`name` maydoni `unique=True`: bir xil nomli ikkita bo'lim bo'lmaydi.
-
-#### `Room` — xona
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `department` | FK → Department, **PROTECT** | Xona qaysi bo'limga tegishli |
-| `floor` | CharField(20) | Qavat. Matn bo'lgani uchun `1`, `-1`, `Mansard` kabi qiymatlar ham bo'lishi mumkin |
-| `number` | CharField(20) | Xona raqami (`105`, `105A`) |
-
-`unique_room_location` constraint'i bir bo'limda bir qavatda bir xil raqamli xona takrorlanishiga yo'l qo'ymaydi. `__str__` natijasi: `Terapiya · 1-qavat · 105-xona`.
-
-#### `Specialty` — mutaxassislik
-
-`name` maydoni `unique=True`.
-
-#### `Doctor` — shifokor
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `user` | OneToOne → User, **PROTECT**, ixtiyoriy | Shifokorning tizimga kirish hisobi |
-| `name` | CharField(150) | Ism-familiya |
-| `specialty` | FK → Specialty, **PROTECT** | Mutaxassisligi (majburiy) |
-| `phone` | CharField(25) | Telefon (majburiy) |
-| `bio` | TextField, ixtiyoriy | Qisqacha ma'lumot |
-| `experience` | PositiveSmallInteger, 5 | Tajriba (yil) |
-| `room` | CharField(15) | Xona — **oddiy matn**, majburiy |
-| `location` | FK → Room, **PROTECT**, ixtiyoriy | Xona — `Room` jadvaliga bog'lanish |
-| `duration` | PositiveSmallInteger | Qabul davomiyligi. Standart qiymati `default_duration()` dan olinadi |
-| `active` | Boolean, True | Faol bo'lmagan shifokorga yozilib bo'lmasligi uchun |
-| `photo` | ImageField, ixtiyoriy | `media/doctors/` ga saqlanadi, `validate_photo` bilan tekshiriladi |
-
-- `valid_duration` constraint'i `5 <= duration <= 240` shartini **baza darajasida** ta'minlaydi.
-- `ordering = ['name']`: ro'yxatlar ism bo'yicha tartiblanadi.
-- `initials` (property): ismning birinchi ikki so'zining bosh harflarini qaytaradi, masalan `Ali Valiyev` → `AV`. Rasm bo'lmaganda avatar uchun ishlatiladi.
-- `room` va `location` ikkalasi ham bor: `room` tez yoziladigan matn, `location` esa bo'lim va qavat bilan to'liq bog'lanish.
-
-#### `WorkHour` — haftalik ish jadvali
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `doctor` | FK → Doctor, **CASCADE**, `related_name='hours'` | Shifokorning ish kunlari `doctor.hours.all()` orqali olinadi |
-| `weekday` | 0–6 (choices) | 0 = Dushanba … 6 = Yakshanba (Python'dagi `date.weekday()` bilan bir xil) |
-| `start`, `end` | TimeField | Ish boshlanishi va tugashi |
-| `break_start`, `break_end` | TimeField, ixtiyoriy | Tanaffus |
-
-- `one_workday` constraint'i: bitta shifokorda bitta hafta kuni uchun faqat bitta qator bo'ladi.
-- `valid_workday` constraint'i: `end > start` (baza darajasida).
-- `clean()`:
-  1. `start >= end` bo'lsa: `Tugash vaqti boshlanishdan keyin bo'lsin.`
-  2. Tanaffusning faqat bitta vaqti kiritilgan bo'lsa: `Tanaffusning ikkala vaqtini kiriting.`
-  3. Tanaffus ish vaqtidan tashqarida bo'lsa: `Tanaffus ish vaqti ichida bo'lsin.` Shart: `start <= break_start < break_end <= end`.
-
-#### `DayOff` — ta'til va istisno sanalar
-
-Maydonlari: `doctor` (FK, **CASCADE**, `related_name='days_off'`), `date`, `reason`. `one_dayoff` constraint'i bitta shifokorga bitta sanani faqat bir marta kiritishga ruxsat beradi.
-
-#### `Patient` — bemor
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `user` | OneToOne → User, **PROTECT**, ixtiyoriy | Bemorning shaxsiy kabinet hisobi. Bo'lmasligi ham mumkin: registrator bemorni qo'lda kiritadi |
-| `name` | CharField(150) | Ism-familiya |
-| `birth_date` | DateField | Tug'ilgan sana (majburiy) |
-| `phone` | CharField(25) | Telefon (majburiy) |
-| `address` | CharField(250), ixtiyoriy | Manzil |
-| `archived` | Boolean, False | Bemor **o'chirilmaydi, arxivlanadi**, shu tufayli qabullar tarixi saqlanib qoladi |
-
-#### `Appointment` — qabul
-
-| Maydon | Turi | Ma'nosi |
-| --- | --- | --- |
-| `doctor` | FK → Doctor, **PROTECT** | Shifokor |
-| `patient` | FK → Patient, **PROTECT** | Bemor |
-| `start`, `end` | DateTimeField | Qabul vaqti |
-| `status` | choices | `scheduled` → `arrived` → `called` → `in_progress` → `completed`, yoki `cancelled` / `missed` |
-| `arrived_at`, `called_at`, `started_at`, `completed_at`, `status_changed_at` | DateTimeField, `editable=False` | Har bir bosqichning aniq vaqti (kod to'ldiradi) |
-| `queue_number`, `queue_priority` | Integer, `editable=False` | Navbat raqami va ustuvorligi |
-| `reason` | CharField(500) | Bemorning murojaat sababi |
-| `note` | TextField | Shifokor izohi |
-| `token` | UUIDField, unique | Tasodifiy, taxmin qilib bo'lmaydigan kalit, masalan bemorga SMS'da yuboriladigan havola uchun. `id=5` ni taxmin qilish oson, UUID'ni esa emas |
-| `created_by` | FK → User, **PROTECT** | Qabulni yaratgan xodim (majburiy) |
-| `created_at`, `updated_at` | DateTimeField | `auto_now_add` / `auto_now` |
-
-- `positive_appointment` constraint'i: `end > start`.
-- `indexes`: `(doctor, start, end)` va `(patient, start, end)`. Ular "shu shifokorning shu kungi qabullari" kabi so'rovlarni tezlashtiradi.
-- `editable=False` maydonlar admin formasida tahrirlanmaydi. Ularni keyin yoziladigan API yoki servis kodi to'ldiradi.
-- **Modelda `clean()` yo'q.** Vaqt to'qnashuvi, `end > start` va shifokor faolligi API'dagi `AppointmentSerializer.validate()` da tekshiriladi (18.4-bo'lim). Admin panelda esa bu tekshiruvlar yo'q. Ish vaqti (`WorkHour`) va `DayOff` hali hech qayerda tekshirilmaydi.
-
-#### `AppointmentStatusEvent` — holat o'zgarishlari tarixi
-
-Maydonlari: `appointment` (FK, **PROTECT**, `related_name='status_events'`), `actor` (FK → User, PROTECT), `previous_status`, `status` (ikkalasi `Appointment.STATUSES` dan) va `changed_at`. Masalan: `scheduled → arrived`, admin, 09:12. `ordering = ['changed_at', 'pk']` — vaqt bir xil bo'lsa, yozuvlar yaratilish tartibida chiqadi.
-
-> Bu modelda `verbose_name` yo'q, shuning uchun admin panelda uning nomi inglizcha (`Appointment status events`) chiqadi.
-
-#### `DirectionEvent` — yo'naltirish tarixi
-
-Bemorning klinika ichidagi yo'lini qayd etadi: `reception` (kelgani tasdiqlandi) → `directed` (xona ko'rsatildi) → `called` → `in_progress` → `completed`. Navbat tartibi o'zgarsa, `reordered` bosqichi yoziladi.
-
-`destination` — **o'sha paytdagi** yo'nalish matni (masalan, `Terapiya · 1-qavat · 105-xona`). U FK emas, oddiy matn, shuning uchun keyin xona o'zgarsa ham tarixda bemor qayerga yuborilgani o'zgarmay qoladi.
-
-#### `Audit` — audit jurnali
-
-Maydonlari: `actor` (FK → User, PROTECT, `null=True` — tizimning o'zi bajargan amallar uchun), `appointment` (FK, PROTECT, ixtiyoriy, `related_name='history'`), `action`, `detail` va `created_at`. `ordering = ['-created_at']` — eng yangi yozuv birinchi chiqadi.
-
-#### `AppointmentHistory` — proxy model
-
-```python
-class AppointmentHistory(Audit):
-    class Meta:
-        proxy = True
-```
-
-**Proxy** model uchun yangi jadval yaratilmaydi, `Audit` jadvalining o'zi ishlatiladi. Python tomonda esa boshqa nom, boshqa admin sahifa yoki boshqa metodlar berish mumkin. Bu yerda admin panelda "Qabul o'zgarish tarixi" alohida bo'lim bo'lib chiqadi va unda faqat qabulga bog'langan audit yozuvlari ko'rsatiladi.
-
-#### `LoginAttempt` — login urinishlari
-
-Maydonlari: `key` (unique, masalan `ip:username`), `count` (urinishlar soni) va `since` (birinchi urinish vaqti). Model parolni ko'p marta taxmin qilishga (brute force) qarshi kerak: `count` chegaradan oshsa, login vaqtincha bloklanadi. Bu mantiq keyin yoziladi.
-
-### 16.4. Bog'lanishlar va `on_delete`
-
-```
-User ─1:1 CASCADE─ Profile
-User ─1:1 PROTECT─ Doctor ─FK PROTECT─ Specialty
-                     │ └──FK PROTECT─ Room ─FK PROTECT─ Department
-                     ├──< WorkHour (CASCADE)
-                     └──< DayOff   (CASCADE)
-User ─1:1 PROTECT─ Patient
-Doctor, Patient, User(created_by) ─FK PROTECT─< Appointment
-Appointment ─FK PROTECT─< AppointmentStatusEvent, DirectionEvent, Audit
-```
-
-**ForeignKey** — "ko'pdan birga" bog'lanish: bitta bo'limda ko'p xona bo'ladi, har bir xona esa bitta bo'limga tegishli. **OneToOneField** — "birga bir" bog'lanish: bitta foydalanuvchi hisobi faqat bitta shifokorga (yoki bitta bemorga, bitta profilga) bog'lanadi.
-
-| `on_delete` | Asosiy yozuv o'chirilganda | Qayerda | Nima uchun |
-| --- | --- | --- | --- |
-| **CASCADE** | Bog'langan yozuvlar **ham o'chadi** | `Profile.user`, `WorkHour.doctor`, `DayOff.doctor` | Bu yozuvlar o'z-o'zidan ma'noga ega emas: shifokorsiz ish jadvali kerak emas |
-| **PROTECT** | O'chirish **taqiqlanadi** (`ProtectedError`). Avval bog'langan yozuvlarni olib tashlash kerak | Qolgan barcha FK va OneToOne'lar | Tibbiy va moliyaviy tarix tasodifan yo'qolmasligi uchun |
-
-Amaldagi natijalari:
-- Qabullari bor shifokor yoki bemorni o'chirib bo'lmaydi. Uning o'rniga shifokorga `active = False`, bemorga `archived = True` qo'yiladi.
-- Tarixi (status, yo'naltirish yoki audit yozuvlari) bor qabulni o'chirib bo'lmaydi. Uning o'rniga `status = cancelled` qo'yiladi.
-- Ichida xona bor bo'limni yoki shifokori bor mutaxassislikni o'chirib bo'lmaydi.
-- Shifokor yoki bemorga bog'langan, yoki qabul yaratgan User'ni o'chirib bo'lmaydi. Uning o'rniga `is_active = False` qo'yiladi.
-- Boshqa hech narsaga bog'lanmagan User o'chirilsa, uning `Profile` i ham birga o'chadi.
-
-### 16.5. Constraint'lar (baza darajasidagi cheklovlar)
-
-| Nomi | Model | Shart |
-| --- | --- | --- |
-| `single_clinic_settings` | ClinicSettings | `id = 1` |
-| `unique_room_location` | Room | `(department, floor, number)` takrorlanmaydi |
-| `valid_duration` | Doctor | `5 <= duration <= 240` |
-| `one_workday` | WorkHour | `(doctor, weekday)` takrorlanmaydi |
-| `valid_workday` | WorkHour | `end > start` |
-| `one_dayoff` | DayOff | `(doctor, date)` takrorlanmaydi |
-| `positive_appointment` | Appointment | `end > start` |
-
-Bulardan tashqari `unique=True` maydonlar: `Department.name`, `Specialty.name`, `Appointment.token`, `LoginAttempt.key`.
-
-**Constraint va `clean()` farqi:**
-
-| | Constraint | `clean()` va validator'lar |
-| --- | --- | --- |
-| Qayerda ishlaydi | Ma'lumotlar bazasining o'zida | Python'da, `full_clean()` chaqirilganda |
-| Qachon ishlaydi | **Har doim**, hatto `shell` yoki xom SQL'da ham | Admin panel va ModelForm'da avtomatik. Oddiy `obj.save()` da **ishlamaydi** |
-| Xato turi | `IntegrityError` (dastur yiqiladi) | `ValidationError` (formada tushunarli xabar chiqadi) |
-
-Shu sababli muhim qoidalar ikki joyda yozilgan, masalan `WorkHour` da `valid_workday` constraint'i ham, `clean()` ham bor. Constraint kafolat beradi, `clean()` esa foydalanuvchiga tushunarli xabar ko'rsatadi.
-
-> DRF'ning `ModelSerializer` i ham modelning `clean()` metodini **chaqirmaydi**. Shu sababli API'da `ModelCleanMixin` yozilgan (18.5-bo'lim).
-
-### 16.6. `clean()` validatsiyalari — jamlanma
-
-| Model | Tekshiruv | Xabar |
-| --- | --- | --- |
-| ClinicSettings | `opens_at < closes_at` | Klinika ish tugashi boshlanishidan keyin bo'lsin. |
-| Profile | Shifokorga bog'langan hisobning roli `doctor` | Hisob shifokorga bog'langan. Avval bog'lanishni tekshiring. |
-| Profile | Bemorga bog'langan hisobning roli `patient` | Hisob bemorga bog'langan. Avval bog'lanishni tekshiring. |
-| WorkHour | `start < end` | Tugash vaqti boshlanishdan keyin bo'lsin. |
-| WorkHour | Tanaffusning ikkala vaqti kiritilgan yoki ikkalasi ham bo'sh | Tanaffusning ikkala vaqtini kiriting. |
-| WorkHour | Tanaffus ish vaqti ichida | Tanaffus ish vaqti ichida bo'lsin. |
-| logo, photo | `validate_photo` | 16.2-bo'limga qarang |
-
-### 16.7. `ClinicSettings` — singleton usuli
-
-**Singleton** — jadvalda faqat bitta yozuv bo'lishi. Bu 4 ta qatlamda ta'minlangan:
-
-| Qatlam | Kod | Natija |
-| --- | --- | --- |
-| 1. `save()` | `self.pk = 1` | Har qanday saqlash 1-yozuvga tushadi. Ikkinchi marta saqlansa, yangi qator yaratilmaydi, mavjud yozuv **yangilanadi** |
-| 2. `load()` | `filter(pk=1).first() or cls(pk=1)` | Sozlamalarni o'qishning yagona to'g'ri usuli. Yozuv bo'lmasa, standart qiymatli (bazaga saqlanmagan) obyekt qaytadi, shuning uchun kod hech qachon `None` olmaydi |
-| 3. Constraint | `CheckConstraint(Q(id=1))` | `save()` chetlab o'tilsa ham (masalan, `bulk_create` yoki SQL orqali), baza `id != 1` ni qabul qilmaydi |
-| 4. Admin | `has_add_permission`, `has_delete_permission` | Yozuv bo'lsa "Qo'shish" tugmasi yo'qoladi, o'chirish esa butunlay yopiq |
-
-Ishlatish:
-
-```python
-from clinic.models import ClinicSettings
-
-s = ClinicSettings.load()      # o'qish
-s.default_duration = 20
-s.save()                       # yangilash
-```
-
-> `ClinicSettings(name='X').save()` ham ishlaydi, lekin u 1-yozuvdagi **barcha** maydonlarni yangi obyektning standart qiymatlari bilan almashtirib yuboradi. `ClinicSettings.objects.create(...)` esa yozuv mavjud bo'lsa `IntegrityError` beradi. Shuning uchun har doim `load()` → o'zgartirish → `save()` tartibidan foydalaning.
-
-2026-11-02 dagi tekshiruv natijasi: ikki marta saqlangandan keyin ham yozuvlar soni `1` bo'lib qoldi, qo'shish va o'chirish sahifalari `403` qaytardi. Sinov tranzaksiya ichida o'tkazilib, oxirida bekor qilindi, shuning uchun bazaga hech narsa yozilmadi.
-
-### 16.8. `clinic/admin.py` — sozlamalar izohi
-
-**Umumiy sozlamalar:**
-
-| Sozlama | Vazifasi |
-| --- | --- |
-| `@admin.register(Model)` | Modelni admin panelga qo'shadi |
-| `list_display` | Ro'yxat sahifasidagi ustunlar |
-| `list_filter` | O'ng tomondagi filtr paneli (masalan, holat yoki shifokor bo'yicha) |
-| `search_fields` | Qidiruv maydoni. `doctor__name` dagi qo'sh pastki chiziq bog'langan modelning maydonini bildiradi |
-| `list_select_related` | Ro'yxatdagi FK'larni bitta SQL so'rovda oladi. Usiz har bir qator uchun alohida so'rov ketadi (N+1 muammosi) |
-| `autocomplete_fields` | FK/OneToOne uchun oddiy ochiluvchi ro'yxat o'rniga qidiruvli maydon. Buning uchun bog'langan model admin'ida `search_fields` bo'lishi shart |
-| `readonly_fields` | Maydon ko'rsatiladi, lekin tahrirlanmaydi. `editable=False` maydonlarni formada ko'rsatishning yagona usuli shu |
-| `date_hierarchy` | Ro'yxat ustida yil → oy → kun bo'yicha navigatsiya |
-| `list_editable` | Ro'yxatning o'zida tahrirlash (Doctor'da `active` belgisi) |
-| `inlines` | Bog'langan yozuvlarni asosiy sahifaning ichida tahrirlash |
-
-**Model bo'yicha:**
-
-| Admin | Xususiyati |
-| --- | --- |
-| `ClinicSettingsAdmin` | `has_add_permission` faqat yozuv bo'lmaganda `True` qaytaradi. `has_delete_permission` doim `False`. `created_at` va `updated_at` faqat o'qish uchun |
-| `ProfileAdmin` | `role` bo'yicha filtr. User'ning username, ismi va emaili bo'yicha qidiruv |
-| `DepartmentAdmin`, `SpecialtyAdmin` | Nomi bo'yicha qidiruv (Room va Doctor'dagi autocomplete uchun ham kerak) |
-| `RoomAdmin` | Bo'lim va qavat bo'yicha filtr |
-| `DoctorAdmin` | `inlines = [WorkHourInline, DayOffInline]`: ish jadvali va ta'tillar shifokor sahifasida jadval ko'rinishida (`TabularInline`) chiqadi. `extra = 0` ortiqcha bo'sh qatorlarni yashiradi, yangi qator "Add another" tugmasi bilan qo'shiladi. Faollik, mutaxassislik va bo'lim bo'yicha filtr |
-| `WorkHourAdmin`, `DayOffAdmin` | Barcha shifokorlarning jadvalini bir joyda ko'rish uchun alohida ro'yxatlar. DayOff'da `date_hierarchy = 'date'` |
-| `PatientAdmin` | `archived` bo'yicha filtr. Ism va telefon bo'yicha qidiruv |
-| `AppointmentAdmin` | `date_hierarchy = 'start'`. Holat, shifokor va mutaxassislik bo'yicha filtr. Bemor ismi va telefoni, shifokor, murojaat sababi bo'yicha qidiruv. Vaqt, navbat va token maydonlari `readonly_fields` da. `save_model()`: `created_by` bo'sh bo'lsa, admin panelga kirgan foydalanuvchi avtomatik yoziladi |
-| `HistoryAdminMixin` | `has_change_permission` va `has_delete_permission` `False` qaytaradi. Tarixni qo'lda o'zgartirib bo'lmaydi, faqat ko'rish mumkin. API hali yo'qligi uchun qo'shishga hozircha ruxsat bor |
-| `AppointmentStatusEventAdmin`, `DirectionEventAdmin`, `AuditAdmin` | `HistoryAdminMixin` dan foydalanadi, vaqt bo'yicha `date_hierarchy` bor |
-| `AppointmentHistoryAdmin` | `AuditAdmin` dan meros oladi. `get_queryset()` faqat `appointment` maydoni bo'sh bo'lmagan yozuvlarni qaytaradi |
-| `LoginAttemptAdmin` | Kalit bo'yicha qidiruv, eng yangi yozuv birinchi |
-
-Tekshiruv natijasi: 15 ta modelning ro'yxat va qo'shish sahifalari `200` qaytardi.
-
-### 16.9. Ma'lumot kiritish tartibi
-
-Admin panelda (`/admin/`) ma'lumotni quyidagi tartibda kiriting. Har bir qadam oldingisiga bog'liq (majburiy FK'lar sababli):
-
-| № | Bo'lim | Nima uchun shu tartibda |
-| --- | --- | --- |
-| 1 | **Klinika sozlamalari** | Shifokorning standart qabul vaqti (`default_duration`) shu yerdan olinadi |
-| 2 | **Bo'limlar** | Xona bo'limsiz yaratilmaydi |
-| 3 | **Xonalar va qavatlar** | Shifokorning `location` maydoni uchun kerak |
-| 4 | **Mutaxassisliklar** | Shifokor mutaxassisliksiz yaratilmaydi |
-| 5 | **Shifokorlar** | Shu sahifaning pastki qismida haftalik ish jadvali va ta'tillarni ham qo'shing |
-| 6 | **Bemorlar** | Qabul uchun kerak |
-| 7 | **Qabullar** | Shifokor va bemor tanlanadi, `created_by` avtomatik yoziladi |
-
-Ixtiyoriy: shifokor yoki bemor tizimga kirishi kerak bo'lsa, avval **Users** bo'limida hisob yarating, uni `Doctor.user` yoki `Patient.user` ga bog'lang va **Hisob profillari** bo'limida mos rolni bering.
-
----
-
-## 17. 2026-11-02: bajarilgan ishlar va git muammosi
-
-### 17.1. Bajarilgan ishlar
-
-```cmd
-python manage.py startapp clinic
-python manage.py check
-python manage.py makemigrations clinic
-python manage.py migrate
-python manage.py check
-pip freeze > requirements.txt
-```
-
-| № | Ish | Natija |
-| --- | --- | --- |
-| 1 | `clinic` app yaratildi va `INSTALLED_APPS` ga qo'shildi | |
-| 2 | `MEDIA_URL`, `MEDIA_ROOT` va `urls.py` ga `static(...)` qo'shildi | |
-| 3 | `.gitignore` yaratildi (`media/` bilan) | Avval bu fayl umuman yo'q edi |
-| 4 | `clinic/models.py` yozildi | `check` natijasi `no issues`: kod tuzatishsiz o'tdi |
-| 5 | `clinic/admin.py` yozildi | 15 ta admin sahifa ishlaydi |
-| 6 | `makemigrations clinic` | `clinic\migrations\0001_initial.py`: 15 ta model, 2 ta index, 7 ta constraint |
-| 7 | `migrate` | `Applying clinic.0001_initial... OK` |
-| 8 | `requirements.txt` yangilandi | O'zgarish yo'q: yangi paket o'rnatilmagan, Pillow avvaldan bor edi |
-| 9 | Git repozitoriyasi to'g'ri joyga ko'chirildi | 17.2-bo'limga qarang |
-| 10 | Clinic API: serializer, view, URL (18-bo'lim) | Fayllarda oldindan yozilgan qoralama kod bor edi. U ko'rib chiqilib, 5 ta kamchiligi tuzatildi (18.7) |
-| 11 | API test client bilan tekshirildi | 32 / 32 o'tdi, test ma'lumotlari rollback qilindi |
-| 12 | `SPECTACULAR_SETTINGS` qo'shildi | Swagger'dagi enum ogohlantirishi yo'qoldi |
-| 13 | `SECRET_KEY`, `DEBUG`, `ALLOWED_HOSTS` → `.env` (19-bo'lim) | `.env.example` yaratildi, `.env` git'ga kirmaydi |
-| 14 | `LANGUAGE_CODE = 'uz'`, `TIME_ZONE = 'Asia/Tashkent'` | `check`: `no issues` |
-| 15 | Birinchi git commit | Push qilinmadi (remote yo'q) |
-
-> `makemigrations` chiqishida `single_clinic_settings` va `one_dayoff` alohida qator bo'lib ko'rinmaydi. Sababi shuki, ular `CreateModel` operatsiyasining ichiga (`options={'constraints': [...]}`) yozilgan. Migratsiya faylida ikkalasi ham bor.
-
-### 17.2. Git muammosi va yechimi
-
-**Muammo:** git repozitoriyasi loyiha papkasida emas, butun foydalanuvchi papkasida (`C:\Users\user`) ochilgan edi. Shu sababli `git status` loyihadan tashqari `.ssh/`, `NTUSER.DAT`, `AppData/`, `Downloads/` kabi papkalarni ham ko'rsatardi.
-
-**Nega xavfli:** `git add .` va `git push` qilinsa, SSH kalitlari, brauzer ma'lumotlari va shaxsiy fayllar GitHub'ga ketib qolishi mumkin edi. Bundan tashqari, foydalanuvchi papkasidagi istalgan boshqa loyiha ham shu bitta repozitoriyaning qismi bo'lib qolardi.
-
-**Sababi:** qachondir `git init` buyrug'i `C:\Users\user` papkasida (CMD ochilgandagi standart papka) ishga tushirilgan.
-
-**Tekshiruv:**
-
-```cmd
-git -C C:\Users\user log --oneline -5
-```
-
-```
-fatal: your current branch 'master' does not have any commits yet
-```
-
-`git -C <papka>` buyruqni o'sha papkaga `cd` qilmasdan bajaradi. Qo'shimcha tekshiruvda commitlar soni `0` chiqdi, branch, stash va remote yo'q edi, staged fayllar ham `0` ta edi. Ya'ni repozitoriya bo'sh edi va uni o'chirganda hech narsa yo'qolmasdi.
-
-**Yechim (ruxsat olingandan keyin):**
-
-```cmd
-rmdir /s /q C:\Users\user\.git
-cd C:\Users\user\Desktop\Rest
-git init
-git add .
-git status
-```
-
-| Buyruq | Vazifasi |
-| --- | --- |
-| `rmdir /s /q C:\Users\user\.git` | Faqat yashirin `.git` papkasini o'chiradi. Foydalanuvchi fayllari o'zgarmaydi, chunki `.git` faqat git'ning xizmat ma'lumotlarini saqlaydi |
-| `git init` | `Rest` ichida yangi, toza repozitoriya ochadi |
-| `git add .` | Fayllarni commit'ga tayyorlaydi, `.gitignore` dagi fayllar bundan mustasno |
-| `git status` | Nima tayyorlanganini ko'rsatadi |
-
-**Natija:** 27 ta fayl tayyorlandi. `env/`, `db.sqlite3`, `.env`, `__pycache__/` va `media/` ro'yxatga kirmadi. Commit hali qilinmagan.
-
-> **Hal qilindi:** `SECRET_KEY` dastlab `settings.py` da edi va staged holatda turardi. Commit qilishdan oldin u `.env` ga ko'chirildi, shuning uchun git tarixiga kirmadi (19-bo'lim).
-
-### 17.3. Keyingi qadamlar
-
-- `Appointment.source_visit` maydoni va `clinical_models.py` (`VisitCard` va boshqalar) ni qo'shish.
-- Qabul validatsiyasiga ish vaqti (`WorkHour`), `DayOff`, bemordagi vaqt to'qnashuvi va arxivlangan bemor tekshiruvlarini qo'shish.
-- `Profile.role` asosida ruxsatlar: bemor faqat o'z ma'lumotini ko'rsin.
-- `ProtectedError` uchun 500 o'rniga tushunarli javob qaytarish.
-- `api/tests.py` ga avtomatik testlar yozish (hozirgi tekshiruv qo'lda ishga tushiriladigan skript).
-- GitHub'da repozitoriya ochib, `git remote add origin ...` va `git push`.
-- `AppointmentStatusEvent` va `LoginAttempt` ga `verbose_name` qo'shish, shunda admin panelda ularning nomi o'zbekcha chiqadi.
-
----
-
-## 18. Clinic API
-
-Modellar `clinic/models.py` da turadi. API kodi esa `api` app'ida, `Book` bilan bir joyda joylashgan:
-
-| Fayl | Ichida nima bor |
-| --- | --- |
-| `api/serializers.py` | `BookSerializer`, `ModelCleanMixin` va har bir clinic modeli uchun serializer |
-| `api/views.py` | `IsStaffOrReadOnly`, `BookViewSet`, `ClinicSettingsView` va clinic ViewSet'lari |
-| `api/urls.py` | `DefaultRouter` (12 ta resurs) va `clinic-settings/` yo'li |
-
-`api/models.py` o'zgarmagan, unda faqat `Book` bor.
-
-### 18.1. Endpointlar va ruxsatlar
-
-Barcha manzillar `/api/` bilan boshlanadi. Router har bir resurs uchun 2 ta manzil yaratadi: `/api/doctors/` (ro'yxat) va `/api/doctors/{id}/` (bitta yozuv).
-
-| URL | Metodlar | Kim o'qiydi | Kim yozadi | Ruxsat klassi |
-| --- | --- | --- | --- | --- |
-| `books/` | GET, POST, PUT, PATCH, DELETE | Hamma | Login qilganlar | `IsAuthenticatedOrReadOnly` (global sozlama) |
-| `clinic-settings/` | GET, PUT, PATCH | Hamma | Xodim (`is_staff`) | `IsStaffOrReadOnly` |
-| `departments/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `rooms/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `specialties/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `doctors/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `work-hours/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `days-off/` | GET, POST, PUT, PATCH, DELETE | Hamma | Xodim | `IsStaffOrReadOnly` |
-| `patients/` | GET, POST, PUT, PATCH, DELETE | Login qilganlar | Login qilganlar | `IsAuthenticated` |
-| `appointments/` | GET, POST, PUT, PATCH, DELETE | Login qilganlar | Login qilganlar | `IsAuthenticated` |
-| `status-events/` | faqat GET | Login qilganlar | — (405) | `IsAuthenticated` + `ReadOnlyModelViewSet` |
-| `directions/` | faqat GET | Login qilganlar | — (405) | `IsAuthenticated` + `ReadOnlyModelViewSet` |
-| `audit/` | faqat GET | Xodim (`is_staff`) | — (405) | `IsAdminUser` |
-
-- **Nega shifokorlar ochiq, bemorlar yopiq:** shifokorlar ro'yxati, bo'limlar va ish jadvali saytda hammaga ko'rsatiladigan ma'lumot. Bemorlar va qabullar esa **shaxsiy tibbiy ma'lumot**, ularni anonim foydalanuvchi o'qiy olmaydi (401).
-- `clinic-settings/` router'da emas, oddiy `path()` orqali ulangan. Sababi: u bitta obyekt, ro'yxati va `{id}` si yo'q. `ClinicSettings` uchun `POST` va `DELETE` yo'q (`RetrieveUpdateAPIView`).
-- `IsAdminUser` nomiga qaramay, superuser'ni emas, `is_staff = True` ni tekshiradi.
-- `DELETE` qilinganda `PROTECT` bog'lanish bo'lsa (masalan, qabullari bor shifokor), Django `ProtectedError` beradi. Hozircha bu 500 bo'lib qaytadi (18.6-bo'limga qarang). Shifokorni `active=false`, bemorni `archived=true` qilish kerak.
-
-> 401 va 403 farqi: **401 Unauthorized** — "siz kimsiz?", ya'ni login qilinmagan. **403 Forbidden** — "siz kimligingizni bilaman, lekin ruxsat yo'q", masalan oddiy foydalanuvchi bo'lim qo'shmoqchi bo'lsa.
-
-### 18.2. Filtrlash, qidiruv va saralash
-
-| URL | `?field=` (aniq filtr) | `?search=` | `?ordering=` |
-| --- | --- | --- | --- |
-| `departments/` | — | `name` | `name`, `created_at` |
-| `rooms/` | `department`, `floor` | `number`, `floor`, bo'lim nomi | `department__name`, `floor`, `number` |
-| `specialties/` | — | `name` | `name`, `created_at` |
-| `doctors/` | `specialty`, `active`, `location` | `name`, `phone`, mutaxassislik nomi | `name`, `experience`, `duration` |
-| `work-hours/` | `doctor`, `weekday` | — | `doctor__name`, `weekday`, `start` |
-| `days-off/` | `doctor`, `date` | shifokor ismi, `reason` | `date` |
-| `patients/` | `archived` | `name`, `phone` | `name`, `birth_date`, `created_at` |
-| `appointments/` | `doctor`, `patient`, `status` | bemor ismi/telefoni, shifokor ismi, `reason` | `start`, `end`, `status`, `queue_number`, `created_at` |
-| `status-events/` | `appointment`, `status`, `actor` | — | `changed_at` |
-| `directions/` | `appointment`, `stage`, `actor` | `destination`, `reason` | `created_at` |
-| `audit/` | `action`, `actor`, `appointment` | `action`, `detail` | `created_at` |
-
-Misollar: `/api/doctors/?active=true&specialty=2`, `/api/appointments/?doctor=1&status=scheduled&ordering=start`, `/api/patients/?search=+99890`.
-
-**Tezlik uchun:** `select_related` (FK, bitta JOIN so'rov) va `prefetch_related` (teskari bog'lanish, alohida bitta so'rov) ishlatilgan. Masalan, `doctors/` ro'yxati har shifokor uchun alohida so'rov yubormaydi: mutaxassislik, xona va bo'lim JOIN orqali, `hours` va `days_off` esa 2 ta qo'shimcha so'rov bilan keladi.
-
-### 18.3. Serializer'lardagi qo'shimcha maydonlar
-
-Bu maydonlar faqat o'qish uchun (`read_only`). Frontend ID o'rniga tayyor nomni ko'rsatishi uchun qo'shilgan:
-
-| Serializer | Maydon | Manbasi |
-| --- | --- | --- |
-| Room | `department_name` | `department.name` |
-| WorkHour | `weekday_name` | `get_weekday_display()` → `Dushanba` |
-| Doctor | `specialty_name` | `specialty.name` |
-| Doctor | `initials` | modeldagi `initials` property → `AV` |
-| Doctor | `hours`, `days_off` | ichma-ich (nested) `WorkHourSerializer` va `DayOffSerializer` ro'yxatlari |
-| Appointment | `doctor_name`, `patient_name` | `doctor.name`, `patient.name` |
-| Appointment | `status_name` | `get_status_display()` → `Belgilangan` |
-| Profile | `role_name` | `get_role_display()` |
-| AppointmentStatusEvent | `status_name` | `get_status_display()` |
-| DirectionEvent | `stage_name` | `get_stage_display()` |
-
-`source='...'` — maydon qiymati qayerdan olinishini bildiradi. Nuqta bog'langan obyektga o'tishni bildiradi (`department.name`). Metod nomi berilsa, DRF uni o'zi chaqiradi.
-
-`ProfileSerializer` va `LoginAttemptSerializer` ham yozilgan, lekin ular uchun endpoint ochilmagan (`LoginAttempt` ichki xavfsizlik modeli). `AppointmentHistory` proxy modeli `Audit` jadvalidan foydalangani uchun `AuditSerializer` bilan ishlaydi.
-
-### 18.4. Validatsiyalar
-
-| Joy | Tekshiruv | Javob (400) |
-| --- | --- | --- |
-| `AppointmentSerializer` | `end > start` | `{"end": ["Tugash vaqti boshlanishdan keyin bo‘lsin."]}` |
-| `AppointmentSerializer` | Shifokor faol bo'lsin (yangi qabulda yoki shifokor almashtirilganda) | `{"doctor": ["Bu shifokor hozir faol emas."]}` |
-| `AppointmentSerializer` | Shu shifokorda vaqt to'qnashuvi yo'q | `{"non_field_errors": ["Shifokorda bu vaqtda boshqa qabul bor."]}` |
-| `DoctorSerializer` | `5 <= duration <= 240` | `{"duration": ["Qabul davomiyligi 5 dan 240 daqiqagacha bo‘lsin."]}` |
-| `ClinicSettingsSerializer` | `ModelCleanMixin` → `opens_at < closes_at` | `{"non_field_errors": ["Klinika ish tugashi boshlanishidan keyin bo‘lsin."]}` |
-| `WorkHourSerializer` | `ModelCleanMixin` → 16.6-bo'limdagi 3 ta qoida | `{"non_field_errors": ["Tanaffus ish vaqti ichida bo‘lsin."]}` |
-| `ProfileSerializer` | `ModelCleanMixin` → rol va bog'lanish mosligi | |
-| Model validator'lari | `MinValueValidator`, `MaxValueValidator`, `validate_photo` | DRF ularni modeldan o'zi oladi |
-| `unique` va `UniqueConstraint` | `Department.name`, `one_workday`, `one_dayoff`, `unique_room_location` | DRF ularni ham modeldan o'zi oladi |
-
-**Vaqt to'qnashuvi qanday tekshiriladi:** ikki oraliq `[A_start, A_end)` va `[B_start, B_end)` faqat `A_start < B_end` **va** `A_end > B_start` bo'lganda kesishadi:
-
-```python
-Appointment.objects.filter(doctor=doctor, start__lt=end, end__gt=start)
-    .exclude(status__in=['cancelled', 'missed'])   # bekor qilingan/kelmagan qabul vaqtni band qilmaydi
-    .exclude(pk=self.instance.pk)                  # faqat update paytida: o'zi bilan solishtirilmaydi
-```
-
-- 09:00–09:30 va 09:30–10:00 qabullari to'qnashmaydi, chunki chegaraviy vaqt qat'iy taqqoslanadi (`<`, `>`).
-- Qabul `cancelled` yoki `missed` holatiga o'tkazilayotgan bo'lsa, to'qnashuv tekshirilmaydi: bekor qilishni hech narsa to'smasligi kerak.
-- Bekor qilingan qabulni qayta faollashtirish (masalan, `completed` ga o'tkazish) to'qnashuvni yana tekshiradi. Bu vaqtga boshqa qabul yozilgan bo'lsa, 400 qaytadi.
-- **Nega faollik har update'da tekshirilmaydi:** shifokor ishdan ketib `active=false` qilinsa ham, uning bugungi qabullarini yakunlash yoki bekor qilish mumkin bo'lishi kerak.
-
-`created_by` maydoni `read_only`, uni klient yubora olmaydi. U `AppointmentViewSet.perform_create()` da qo'yiladi:
-
-```python
-def perform_create(self, serializer):
-    serializer.save(created_by=self.request.user)
-```
-
-### 18.5. `ModelCleanMixin` va `IsStaffOrReadOnly` qanday ishlaydi
-
-#### `ModelCleanMixin`
-
-**Muammo:** modeldagi `clean()` faqat Django formalarida (admin) avtomatik chaqiriladi. DRF serializer'i uni **chaqirmaydi**, shuning uchun mixin'siz API orqali tanaffusi ish vaqtidan tashqarida bo'lgan jadvalni saqlash mumkin bo'lardi.
-
-```python
-class ModelCleanMixin:
-    def validate(self, attrs):
-        attrs = super().validate(attrs)
-        instance = copy.copy(self.instance) if self.instance else self.Meta.model()
-        for key, value in attrs.items():
-            setattr(instance, key, value)
-        try:
-            instance.clean()
-        except DjangoValidationError as e:
-            if hasattr(e, 'error_dict'):
-                raise serializers.ValidationError(e.message_dict)
-            raise serializers.ValidationError({'non_field_errors': e.messages})
-        return attrs
-```
-
-| Qadam | Izoh |
-| --- | --- |
-| `super().validate(attrs)` | Avval DRF'ning oddiy tekshiruvlari ishlaydi |
-| `copy.copy(self.instance)` | Update (PUT/PATCH) paytida mavjud obyektning **nusxasi** olinadi. Nusxa bo'lmasa, validatsiya xato bersa ham asl obyekt xotirada o'zgarib qolardi |
-| `self.Meta.model()` | Create (POST) paytida bo'sh yangi obyekt yaratiladi |
-| `setattr(...)` | Kelgan qiymatlar obyektga yoziladi. PATCH da kelmagan maydonlar eski qiymatida qoladi |
-| `instance.clean()` | Modelning o'z validatsiyasi chaqiriladi, kod takrorlanmaydi |
-| `DjangoValidationError` → `serializers.ValidationError` | Django xatosini DRF tushunadigan xatoga aylantiradi, natijada klient 500 emas, **400** va xabar oladi |
-| `message_dict` / `non_field_errors` | Xato maydonga bog'langan bo'lsa, `{"maydon": [...]}`, aks holda `{"non_field_errors": [...]}` qaytadi |
-
-Ishlatilgan joylari: `ClinicSettingsSerializer`, `WorkHourSerializer`, `ProfileSerializer`. Mixin `ModelSerializer` dan **oldin** yoziladi (`class X(ModelCleanMixin, serializers.ModelSerializer)`), shunda `validate()` avval mixin'da ishlaydi, `super()` esa DRF'nikini chaqiradi.
-
-#### `IsStaffOrReadOnly`
-
-```python
-class IsStaffOrReadOnly(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        return bool(request.user and request.user.is_staff)
-```
-
-- `SAFE_METHODS` = `GET`, `HEAD`, `OPTIONS`. Bu metodlar ma'lumotni o'zgartirmaydi, shuning uchun hammaga ruxsat beriladi.
-- `POST`, `PUT`, `PATCH`, `DELETE` faqat `is_staff = True` bo'lgan foydalanuvchiga ruxsat etiladi. Admin panelda bu **Staff status** belgisi.
-- Anonim foydalanuvchi uchun `request.user` — `AnonymousUser`, uning `is_staff` qiymati `False`.
-- DRF'dagi tayyor `IsAdminUser` o'qishni ham yopadi, `IsAuthenticatedOrReadOnly` esa yozishni har qanday login qilgan foydalanuvchiga ochadi. Bizga ularning o'rtasidagi variant kerak edi.
-
-### 18.6. Misol so'rov va javoblar
-
-**Qabul yaratish** — `POST /api/appointments/`, sarlavhada `Authorization: Bearer <access_token>`:
-
-```json
-{
-	"doctor": 1,
-	"patient": 1,
-	"start": "2026-11-10T09:00:00+05:00",
-	"end": "2026-11-10T09:30:00+05:00",
-	"reason": "Bosh og'rig'i"
-}
-```
-
-Javob `201 Created`:
-
-```json
-{
-	"id": 1,
-	"doctor_name": "Ali Valiyev",
-	"patient_name": "Vali Aliyev",
-	"status_name": "Belgilangan",
-	"start": "2026-11-10T09:00:00+05:00",
-	"end": "2026-11-10T09:30:00+05:00",
-	"status": "scheduled",
-	"arrived_at": null,
-	"started_at": null,
-	"completed_at": null,
-	"status_changed_at": null,
-	"queue_number": null,
-	"queue_priority": 0,
-	"called_at": null,
-	"reason": "Bosh og'rig'i",
-	"note": "",
-	"token": "31b399dc-403f-49c2-ab6e-a0b7d3476213",
-	"created_at": "2026-11-02T09:05:40.982644+05:00",
-	"updated_at": "2026-11-02T09:05:40.982650+05:00",
-	"doctor": 1,
-	"patient": 1,
-	"created_by": 1
-}
-```
-
-Vaqtlar `+05:00` (Toshkent) bilan qaytadi, chunki `TIME_ZONE = 'Asia/Tashkent'`. Bazada esa ular UTC'da saqlanadi (`USE_TZ = True`).
-
-**Xuddi shu shifokorga 09:15–09:45** — `400 Bad Request`:
-
-```json
-{ "non_field_errors": ["Shifokorda bu vaqtda boshqa qabul bor."] }
-```
-
-**Shifokor** — `GET /api/doctors/1/` (login shart emas):
-
-```json
-{
-	"id": 1,
-	"specialty_name": "Terapevt",
-	"initials": "AV",
-	"hours": [
-		{
-			"id": 1,
-			"weekday_name": "Dushanba",
-			"weekday": 0,
-			"start": "09:00:00",
-			"end": "17:00:00",
-			"break_start": "13:00:00",
-			"break_end": "14:00:00",
-			"doctor": 1,
-			"created_at": "2026-11-02T09:05:40.977984+05:00",
-			"updated_at": "2026-11-02T09:05:40.978085+05:00"
-		}
-	],
-	"days_off": [],
-	"name": "Ali Valiyev",
-	"phone": "+998901112233",
-	"bio": "",
-	"experience": 5,
-	"room": "105",
-	"duration": 30,
-	"active": true,
-	"photo": null,
-	"user": null,
-	"specialty": 1,
-	"location": null,
-	"created_at": "2026-11-02T09:05:40.974074+05:00",
-	"updated_at": "2026-11-02T09:05:40.974951+05:00"
-}
-```
-
-**Klinika sozlamalari** — `GET /api/clinic-settings/`. Yozuv hali saqlanmagan bo'lsa ham `ClinicSettings.load()` standart qiymatlarni qaytaradi (`updated_at: null` shundan dalolat beradi):
-
-```json
-{
-	"created_at": "2026-11-02T09:05:40.992727+05:00",
-	"updated_at": null,
-	"document_max_mb": 10,
-	"offer_minutes": 15,
-	"name": "Medora Clinic",
-	"logo": null,
-	"phone": "",
-	"address": "",
-	"opens_at": "08:00:00",
-	"closes_at": "18:00:00",
-	"default_duration": 30,
-	"booking_days": 90,
-	"cancellation_hours": 0
-}
-```
-
-`PATCH /api/clinic-settings/` (`{"default_duration": 20}`) faqat xodimga ruxsat etiladi va har doim `id=1` yozuvni yangilaydi yoki yaratadi.
-
-**Login qilmasdan bemorlar** — `GET /api/patients/` → `401`:
-
-```json
-{ "detail": "Authentication credentials were not provided." }
-```
-
-> DRF'ning maydon xabarlari `LANGUAGE_CODE = 'uz'` tufayli o'zbekcha chiqadi (`Ushbu maydon to'ldirilishi shart.`). Ammo autentifikatsiya kabi ba'zi xabarlar inglizcha qoladi, chunki DRF'ning o'zbekcha tarjimasi to'liq emas.
-
-### 18.7. Tekshiruv natijalari (2026-11-02)
-
-Sinov `manage.py shell` ichida DRF `APIClient` bilan o'tkazildi. Barcha ma'lumotlar `transaction.atomic()` ichida yaratilib, oxirida `set_rollback(True)` bilan bekor qilindi, shuning uchun baza o'zgarmadi. Natija: **32 / 32 o'tdi**.
-
-| Tekshiruv | Kutilgan | Natija |
-| --- | --- | --- |
-| Anonim `GET /api/doctors/` | 200 | 200 |
-| Anonim `POST /api/doctors/` | 401/403 | 401 |
-| Anonim `GET /api/patients/` | 401/403 | 401 |
-| Admin `GET /api/patients/` | 200 | 200 |
-| Qabul 09:00–09:30 | 201 | 201, `created_by` = admin |
-| To'qnashgan qabul 09:15–09:45 | 400 | 400 |
-| Qo'shni qabul 09:30–10:00 | 201 | 201 |
-| Qabulni o'zini PATCH qilish | 200 | 200 |
-| `end <= start` | 400 | 400 |
-| Bekor qilingan vaqtga yangi qabul | 201 | 201 |
-| Faol bo'lmagan shifokorga qabul | 400 | 400 |
-| Faol bo'lmagan shifokorning eski qabulini yakunlash | 200 | 200 |
-| `duration = 300` | 400 | 400 |
-| WorkHour: tanaffus ish vaqtidan tashqarida | 400 | 400 |
-| ClinicSettings: `opens_at` > `closes_at` | 400 | 400 |
-| ClinicSettings PATCH, so'ng yozuvlar soni | 200, 1 | 200, 1 |
-| Anonim `GET /api/clinic-settings/` | 200 | 200 |
-| Oddiy user `POST /api/departments/` | 403 | 403 |
-| Oddiy user / admin `GET /api/audit/` | 403 / 200 | 403 / 200 |
-| `POST /api/status-events/` | 405 | 405 |
-| `GET /api/docs/`, `GET /api/schema/` | 200 | 200 |
-
-**Sinov paytida topilib, tuzatilgan muammolar:**
-
-| Muammo | Sababi | Yechim |
-| --- | --- | --- |
-| `duration=300` yuborilsa, 500 xato bo'lishi mumkin edi | DRF modeldagi `CheckConstraint` ni bilmaydi, xato bazaning o'zida chiqadi | `DoctorSerializer.validate_duration()` qo'shildi |
-| Faolsizlantirilgan shifokorning qabulini yakunlab bo'lmasdi | Faollik har update'da tekshirilardi | Faollik faqat yangi qabulda yoki shifokor almashtirilganda tekshiriladi |
-| `Warning: encountered multiple names for the same choice set (PreviousStatusEnum)` | `status` va `previous_status` bir xil choices'dan foydalanadi, drf-spectacular esa ularga ikki xil enum nomi beryapti | `settings.py` ga `SPECTACULAR_SETTINGS['ENUM_NAME_OVERRIDES']` qo'shildi |
-| `UnorderedObjectListWarning: ... Book QuerySet` | Tartiblanmagan querysetni sahifalash bir xil yozuvni ikki sahifada ko'rsatishi mumkin | `Book.objects.order_by('id')` |
-| `ModelCleanMixin` asl obyektni o'zgartirardi | `setattr` to'g'ridan-to'g'ri `self.instance` ga yozilardi | `copy.copy()` nusxasi ustida tekshiriladi |
-
-**Hali tekshirilmaydigan narsalar** (keyingi bosqich):
-- Qabul shifokorning ish vaqtiga (`WorkHour`) va ta'tilga (`DayOff`) to'g'ri kelishi.
-- Bemorning o'zida ham vaqt to'qnashuvi bo'lmasligi.
-- Arxivlangan bemorga qabul yozish.
-- Bir vaqtda kelgan ikki so'rovdagi poyga holati (race condition): ikkalasi ham tekshiruvdan o'tib ketishi mumkin. Buni PostgreSQL'da `select_for_update()` yoki `ExclusionConstraint` bilan hal qilish mumkin.
-- Rollar bo'yicha cheklov: hozir login qilgan **har qanday** foydalanuvchi (masalan, bemor roli bilan ham) barcha bemorlarni ko'ra oladi. `Profile.role` asosida ruxsat yozish kerak.
-- `PROTECT` sababli o'chirish rad etilsa, 500 o'rniga tushunarli 400/409 javob qaytarish.
-
----
-
-## 19. `.env` sozlamalari
+## 16. `.env` sozlamalari
 
 Maxfiy va muhitga bog'liq sozlamalar kod ichida emas, loyiha papkasidagi `.env` faylida saqlanadi. Bu faylni `python-dotenv` paketi o'qiydi.
 
-### 19.1. Fayllar
+### 16.1. Fayllar
 
 | Fayl | Git'ga yuklanadimi | Vazifasi |
 | --- | --- | --- |
@@ -1651,9 +850,9 @@ ALLOWED_HOSTS=127.0.0.1,localhost
 | --- | --- | --- | --- |
 | `SECRET_KEY` | Sessiyalar, parolni tiklash havolalari, CSRF va imzolangan ma'lumotlar shu kalit bilan himoyalanadi. Kalitni bilgan odam sessiyani soxtalashtira oladi | Istalgan uzun qator | Yangi, tasodifiy, faqat shu serverga tegishli kalit |
 | `DEBUG` | `True` bo'lsa, xato sahifasida kod, sozlamalar va so'rov ma'lumotlari ko'rinadi. Media fayllarni ham Django o'zi beradi | `True` | **Albatta `False`** |
-| `ALLOWED_HOSTS` | Django javob beradigan domenlar. Boshqa `Host` sarlavhali so'rovlar 400 bilan rad etiladi (Host header hujumidan himoya) | `127.0.0.1,localhost` | `medora.uz,www.medora.uz` |
+| `ALLOWED_HOSTS` | Django javob beradigan domenlar. Boshqa `Host` sarlavhali so'rovlar 400 bilan rad etiladi (Host header hujumidan himoya) | `127.0.0.1,localhost` | `restoran.uz,www.restoran.uz` |
 
-### 19.2. `settings.py` dagi kod
+### 16.2. `settings.py` dagi kod
 
 ```python
 import os
@@ -1683,7 +882,7 @@ ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '').split(',') if
 
 **Nega `SECRET_KEY` qo'shtirnoqda:** kalitda `#`, `$`, `(`, `)` belgilari bor. Qo'shtirnoqsiz yozilganda python-dotenv probeldan keyingi `#` ni izoh, `${...}` ni esa boshqa o'zgaruvchiga havola deb tushunishi mumkin. Bitta qo'shtirnoq ichida hech narsa o'zgartirilmaydi. Tekshiruv: `.env` dan o'qilgan kalit eskisi bilan aynan bir xil chiqdi.
 
-### 19.3. Til va vaqt zonasi
+### 16.3. Til va vaqt zonasi
 
 ```python
 LANGUAGE_CODE = 'uz'
@@ -1695,7 +894,7 @@ TIME_ZONE = 'Asia/Tashkent'
 | `LANGUAGE_CODE = 'uz'` | Admin panel va DRF xabarlari o'zbekcha chiqadi (Django'da tarjimasi bor qismlari) |
 | `TIME_ZONE = 'Asia/Tashkent'` | Admin panel va API vaqtni Toshkent vaqtida (`+05:00`) ko'rsatadi. `USE_TZ = True` bo'lgani uchun bazada vaqt baribir UTC'da saqlanadi, faqat ko'rsatish va kiritish Toshkent vaqtida bo'ladi. Windows'da vaqt zonalari bazasini `tzdata` paketi beradi, u allaqachon o'rnatilgan |
 
-### 19.4. `.env.example` dan foydalanish
+### 16.4. `.env.example` dan foydalanish
 
 Loyihani boshqa kompyuterga yoki serverga ko'chirganda:
 
@@ -1711,3 +910,534 @@ python -c "from django.core.management.utils import get_random_secret_key; print
 > Yangi sozlama qo'shilsa (masalan, PostgreSQL paroli), uni `.env` ga haqiqiy qiymat bilan, `.env.example` ga esa namuna qiymat bilan yozing. Shunda boshqa dasturchi nimani to'ldirish kerakligini biladi.
 
 > Hozirgi kalit `django-insecure-` bilan boshlanadi, ya'ni `startproject` yaratgan ishlab chiqish kaliti. U hech qachon commit qilinmagan, shuning uchun mahalliy ishda xavfsiz. Lekin serverda alohida yangi kalit ishlating.
+
+---
+
+## 17. Restoran: modellar va bog'lanishlar
+
+Barcha modellar `restaurant/models.py` da, API kodi esa `api` app'ida (`Book` bilan bir joyda). Pul maydonlari: `DecimalField(max_digits=12, decimal_places=2)`, so'mda.
+
+| Model | Vazifasi | Muhim maydonlar va cheklovlar |
+| --- | --- | --- |
+| `Timestamped` | Abstract: jadval yaratilmaydi | `created_at`, `updated_at` |
+| `RestaurantSettings` | Sozlamalar, **faqat bitta yozuv** (`pk=1`) | `name`, `phone`, `address`, `logo` (3 MB, JPEG/PNG/WebP), `opens_at`, `closes_at`, `reservation_duration` (120), `booking_days` (30), `service_percent` (0–30, standart 10). `CheckConstraint(id=1)`, `load()`, `clean()`: `closes_at > opens_at` |
+| `Profile` | Foydalanuvchi roli | `user` (OneToOne), `role`: `admin`, `waiter`, `chef`, `customer` (standart), `phone` |
+| `Category` | Menyu bo'limi | `name` (unique), `order`, `active` |
+| `MenuItem` | Taom | `price` (> 0), `image`, `preparation_minutes`, `available`, `is_vegetarian`, `spicy`. `UniqueConstraint(category, name)` |
+| `Table` | Stol | `number` (unique), `seats` (1–20), `location`: `hall`, `terrace`, `vip`, `active` |
+| `Reservation` | Bron | `guests`, `start`, `end`, `status`, `name`, `phone`, `note`. `CheckConstraint(end > start)`, `Index(table, start, end)` |
+| `Order` | Buyurtma | `order_type`, `status`, `note`, `service_percent` (buyurtma paytidagi qiymat), `subtotal`, `service_amount`, `total` (`editable=False`), `paid_at`, `recalculate()`, `change_status()` |
+| `OrderItem` | Buyurtma qatori | `quantity` (1–999), `unit_price` (buyurtma paytidagi narx), `line_total` (`editable=False`), `note` |
+| `OrderStatusEvent` | Holat tarixi, faqat o'qish | `previous_status`, `status`, `actor`, `changed_at` |
+
+### 17.1. Bog'lanishlar
+
+```
+User ──1:1── Profile
+
+Category ──1:N── MenuItem ──1:N── OrderItem ──N:1── Order ──1:N── OrderStatusEvent
+                                                     │
+Table ──1:N── Reservation ──1:N──────────────────────┤
+  └──────────1:N─────────────────────────────────────┘
+
+User ──1:N── Reservation (customer, created_by)
+User ──1:N── Order (customer, waiter)
+User ──1:N── OrderStatusEvent (actor)
+```
+
+| Bog'lanish | `on_delete` | Natija |
+| --- | --- | --- |
+| `MenuItem.category` | `PROTECT` | Taomi bor kategoriya o'chmaydi |
+| `OrderItem.menu_item` | `PROTECT` | Buyurtmada ishlatilgan taom o'chmaydi |
+| `Reservation.table`, `Order.table` | `PROTECT` | Broni yoki buyurtmasi bor stol o'chmaydi |
+| `Reservation.customer` | `PROTECT` | Broni bor foydalanuvchi o'chmaydi |
+| `OrderItem.order`, `OrderStatusEvent.order` | `CASCADE` | Buyurtma o'chsa, qatorlari va tarixi ham o'chadi |
+| `Order.customer`, `Order.waiter`, `Order.reservation`, `Reservation.created_by`, `OrderStatusEvent.actor` | `SET_NULL` | Foydalanuvchi yoki bron o'chsa ham buyurtma tarixi qoladi |
+
+### 17.2. Narx nega "muzlatiladi"
+
+`OrderItem.unit_price` va `Order.service_percent` buyurtma yaratilganda nusxalanadi. Keyin menyu narxi yoki sozlamadagi foiz o'zgarsa, eski buyurtma, shu jumladan `recalculate()` natijasi ham, o'zgarmaydi.
+
+```
+subtotal       = line_total'lar yig'indisi
+service_amount = subtotal × service_percent / 100   (0.01 gacha, ROUND_HALF_UP)
+total          = subtotal + service_amount
+```
+
+> Xizmat haqi barcha buyurtma turlariga (`takeaway` va `delivery` ham) qo'llanadi, chunki topshiriqda istisno ko'rsatilmagan.
+
+### 17.3. Admin panel
+
+| Model | Xususiyati |
+| --- | --- |
+| `RestaurantSettings` | Faqat bitta yozuv: ikkinchisini qo'shib ham, o'chirib ham bo'lmaydi |
+| `Category` | Ichida `MenuItem` inline |
+| `MenuItem` | Ro'yxatning o'zida `price` va `available` tahrirlanadi (`list_editable`) |
+| `Reservation` | `end` avtomatik hisoblanadi; ish vaqti, sig'im va vaqt to'qnashuvi `clean()` da tekshiriladi |
+| `Order` | Ichida `OrderItem` inline. Qator faqat `new` holatda qo'shiladi yoki o'chiriladi, mavjud qator tahrirlanmaydi. Saqlaganda summalar qayta hisoblanadi. `status` faqat o'qish uchun |
+| `OrderItem`, `OrderStatusEvent` | Faqat o'qish |
+
+> Admin panelda tarixi bor buyurtmani o'chirib bo'lmaydi, chunki `OrderStatusEvent` da o'chirish huquqi yopiq va Django bog'langan yozuvlarni tekshiradi. Bu ataylab qoldirilgan: moliyaviy tarix tasodifan yo'qolmaydi.
+
+---
+
+## 18. Rollar jadvali
+
+Rol `Profile.role` dan olinadi. `is_superuser = True` har doim **admin**. Profili yo'q foydalanuvchi **customer** hisoblanadi. `is_staff` rolga ta'sir qilmaydi. Cheklovlar ikki qavatli: `api/permissions.py` amalni, `get_queryset` esa qaysi yozuvlar ko'rinishini belgilaydi. Shuning uchun boshqa birovning yozuvi **404** qaytaradi.
+
+| Resurs | Anonim | customer | chef | waiter | admin |
+| --- | --- | --- | --- | --- | --- |
+| Menyu, kategoriya, taom, stol, sozlamalar | O'qish | O'qish | O'qish | O'qish | **Hammasi** |
+| Bron | — | O'zinikini ko'radi, yaratadi, bekor qiladi | — | **Hammasi** | **Hammasi** |
+| Buyurtma | — | O'zinikini ko'radi, yaratadi | `new`, `cooking`, `ready` dagilarini ko'radi | **Hammasi** | **Hammasi** |
+| `set-status` | — | — | Faqat `cooking`, `ready` ga | Barcha ruxsat etilgan o'tishlar | Barcha ruxsat etilgan o'tishlar |
+| Oshxona ro'yxati | — | — | Ha | Ha | Ha |
+| Holat tarixi (o'qish) | — | O'z buyurtmalari | Ko'radigan buyurtmalari | Hammasi | Hammasi |
+| Profillar, kunlik hisobot | — | — | — | — | **Hammasi** |
+| Kitoblar (`Book`) | O'qish | **Hammasi** | **Hammasi** | **Hammasi** | **Hammasi** |
+
+Avtomatik to'ldiriladigan maydonlar:
+
+| Rol | Bron | Buyurtma |
+| --- | --- | --- |
+| customer | `customer` va `created_by` = o'zi, `status` = `pending`; yuborgan qiymati e'tiborsiz qoldiriladi | `customer` = o'zi, `waiter` = bo'sh |
+| waiter | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi) | `waiter` = o'zi, `customer` tanlanadi |
+| admin | `created_by` = o'zi, `customer` tanlanadi (yuborilmasa o'zi) | `waiter` va `customer` tanlanadi |
+
+> Topshiriqda oshpazning bronga va mijozning `set-status` ga huquqi ko'rsatilmagan, shuning uchun ikkalasi yopiq. Mijoz buyurtmani bekor qila olmaydi, buni ofitsiant qiladi.
+
+---
+
+## 19. Endpointlar
+
+Barcha manzillar `/api/` bilan boshlanadi. Ro'yxatlar sahifalanadi (`?page=`), uchta maxsus ro'yxat (`menu`, `tables/available`, `orders/kitchen`) bundan mustasno. To'liq sxema: `/api/docs/`.
+
+| Metod | URL | Ruxsat | Vazifasi |
+| --- | --- | --- | --- |
+| POST | `token/`, `token/refresh/` | Hamma | JWT olish va yangilash |
+| GET | `menu/` | Hamma | Faol kategoriyalar ichida mavjud taomlar |
+| GET | `settings/` | Hamma | Sozlamalar |
+| PUT, PATCH | `settings/` | admin | Sozlamalarni o'zgartirish |
+| GET | `categories/`, `categories/{id}/` | Hamma | Kategoriyalar |
+| POST, PUT, PATCH, DELETE | `categories/`, `categories/{id}/` | admin | Boshqarish |
+| GET | `menu-items/`, `menu-items/{id}/` | Hamma | Taomlar (`?category=`, `?available=`, `?is_vegetarian=`, `?spicy=`, `?search=`) |
+| POST, PUT, PATCH, DELETE | `menu-items/`, `menu-items/{id}/` | admin | Boshqarish |
+| GET | `tables/`, `tables/{id}/` | Hamma | Stollar (`?location=`, `?active=`, `?seats=`) |
+| POST, PUT, PATCH, DELETE | `tables/`, `tables/{id}/` | admin | Boshqarish |
+| GET | `tables/available/?start=...&guests=...` | Hamma | Shu vaqtda bo'sh va sig'adigan stollar |
+| GET | `reservations/`, `reservations/{id}/` | customer (o'ziniki), waiter, admin | Bronlar (`?table=`, `?status=`, `?customer=`) |
+| POST | `reservations/` | customer, waiter, admin | Bron yaratish |
+| PUT, PATCH, DELETE | `reservations/{id}/` | waiter, admin | Boshqarish |
+| POST | `reservations/{id}/cancel/` | customer (o'ziniki), waiter, admin | Bekor qilish (`pending` yoki `confirmed` holatidan) |
+| GET | `orders/`, `orders/{id}/` | customer (o'ziniki), chef (faol), waiter, admin | Buyurtmalar (`?status=`, `?order_type=`, `?table=`, `?customer=`, `?waiter=`) |
+| POST | `orders/` | customer, waiter, admin | Taomlar bilan birga yaratish |
+| PUT, PATCH, DELETE | `orders/{id}/` | waiter, admin | Boshqarish (`items` va `status` dan tashqari) |
+| POST | `orders/{id}/set-status/` | chef (cheklangan), waiter, admin | Holatni o'zgartirish |
+| GET | `orders/kitchen/` | chef, waiter, admin | `new` va `cooking`, eng eskisi birinchi |
+| GET | `order-events/`, `order-events/{id}/` | Login qilganlar (rol bo'yicha filtr) | Holat tarixi, faqat o'qish (`?order=`) |
+| GET, POST, PUT, PATCH, DELETE | `profiles/`, `profiles/{id}/` | admin | Profillar |
+| GET | `reports/daily/?date=YYYY-MM-DD` | admin | Kunlik hisobot (sana yuborilmasa, bugun) |
+| GET | `books/`, `books/{id}/` | Hamma | Kitoblar |
+| POST, PUT, PATCH, DELETE | `books/`, `books/{id}/` | Login qilganlar | Boshqarish |
+
+Javob kodlari: **400** noto'g'ri ma'lumot, **401** login qilinmagan, **403** rolga ruxsat yo'q, **404** yozuv yo'q yoki sizga ko'rinmaydi.
+
+> `?start=` da vaqt zonasi yozilsa, `+` belgisi URL'da `%2B` bo'lishi kerak: `2026-11-06T18:00:00%2B05:00`. Zonasiz yozilsa (`2026-11-06T18:00:00`), Toshkent vaqti deb olinadi.
+
+**Kunlik hisobot qanday hisoblanadi:** `orders_count` shu kuni yaratilgan barcha buyurtmalar (bekor qilinganlar ham). `paid_orders_count`, `paid_total` va `top_items` esa shu kuni to'langan (`paid_at`) buyurtmalardan olinadi.
+
+---
+
+## 20. Validatsiyalar
+
+### 20.1. Bron
+
+| Qoida | Xato qaysi maydonda |
+| --- | --- |
+| `guests` stol sig'imidan oshmasin | `guests` |
+| Stol faol bo'lsin | `table` |
+| O'tgan vaqtga bron qilib bo'lmaydi | `start` |
+| `booking_days` kundan uzoq bo'lmasin | `start` |
+| Butun bron ish vaqtiga sig'sin: `start >= opens_at` va `end <= closes_at`, bitta kun ichida | `start` |
+| `end` har doim serverda: `start + reservation_duration`; yuborilgan qiymat e'tiborsiz qoldiriladi | — |
+| Shu stolda vaqt to'qnashuvi bo'lmasin; `cancelled`, `no_show`, `completed` hisobga olinmaydi | `start` |
+
+- **Ish vaqti misoli:** 10:00–23:00 va 120 daqiqada eng kech bron 21:00 da boshlanadi.
+- **Yonma-yon bronlar ruxsat etiladi:** 12:00–14:00 va 14:00–16:00 to'qnashmaydi.
+- **Tahrirlashda faqat o'zgargan qism tekshiriladi.** Aks holda o'tib ketgan bronni `completed` qilib bo'lmay qolardi. To'qnashuv esa bron faol holatda bo'lsa har doim tekshiriladi, shuning uchun bekor qilingan bronni band vaqtga qaytarib bo'lmaydi.
+- **Poyga holati:** tekshiruv va saqlash `transaction.atomic()` ichida, `Table` qatori `select_for_update()` bilan qulflanadi.
+
+> **SQLite'da cheklov:** SQLite `select_for_update()` ni e'tiborsiz qoldiradi, shuning uchun bu qulf PostgreSQL'da haqiqatan ishlaydi. Serverda albatta PostgreSQL ishlating.
+
+### 20.2. Buyurtma
+
+| Qoida | Natija |
+| --- | --- |
+| `items` majburiy va bo'sh bo'lmasin | 400 |
+| `available=False` yoki faol bo'lmagan kategoriyadagi taom qo'shilmaydi | 400 |
+| `quantity` 1 dan 999 gacha | 400 |
+| `unit_price`, `line_total`, `subtotal`, `service_amount`, `total`, `service_percent`, `status`, `paid_at` faqat serverda | Yuborilgani e'tiborsiz qoldiriladi |
+| `dine_in` uchun `table` majburiy, stol faol bo'lsin | 400 |
+| Mijoz faqat o'z bronini bog'lay oladi; bron stoli buyurtma stoli bilan bir xil bo'lsin | 400 |
+| Yaratilgandan keyin `items` o'zgarmaydi | 400 |
+| `paid` yoki `cancelled` buyurtma tahrirlanmaydi | 400 |
+
+### 20.3. O'chirish
+
+`PROTECT` bilan bog'langan yozuvni o'chirishda `ProtectedError` chiqadi. `ProtectedDestroyMixin` uni 500 o'rniga 400 ga aylantiradi:
+
+```json
+{ "detail": "Bu yozuvni o‘chirib bo‘lmaydi: unga bog‘langan boshqa yozuvlar bor." }
+```
+
+---
+
+## 21. Buyurtma holatlari
+
+```
+         ┌─────┐     ┌─────────┐     ┌───────┐     ┌────────┐     ┌──────┐
+ yangi → │ new │ ──→ │ cooking │ ──→ │ ready │ ──→ │ served │ ──→ │ paid │
+         └──┬──┘     └────┬────┘     └───┬───┘     └───┬────┘     └──────┘
+            │             │              │             │
+            └─────────────┴──────┬───────┴─────────────┘
+                                 ↓
+                           ┌───────────┐
+                           │ cancelled │
+                           └───────────┘
+```
+
+| Qoida | Tafsilot |
+| --- | --- |
+| Tartib | Bosqichni sakrab yoki orqaga o'tib bo'lmaydi: 400 |
+| Yakuniy holatlar | `paid` va `cancelled` dan hech qayerga o'tilmaydi |
+| Holat qayerda o'zgaradi | Faqat `POST /api/orders/{id}/set-status/`. `PATCH` dagi `status` e'tiborsiz qoldiriladi |
+| Tarix | Yaratilish va har bir o'tish `OrderStatusEvent` ga yoziladi |
+| To'lov | `paid` bo'lganda `paid_at` qo'yiladi |
+| Oshpaz | Faqat `new → cooking` va `cooking → ready`. Boshqa holatga urinish: 403 |
+
+---
+
+## 22. Misol so'rov va javoblar
+
+Quyidagilar seed ma'lumotlari ustida haqiqiy so'rovlardan olingan javoblar. `customer1`, `waiter1` va `chef1` JWT bilan kirgan. Tranzaksiya bekor qilingani uchun bu bron va buyurtma bazada qolmagan, shuning uchun `id` lar sizda boshqacha bo'lishi mumkin.
+
+### 22.1. Menyu: `GET /api/menu/`
+
+Javobning birinchi kategoriyasi, birinchi taomi (qolganlari qisqartirildi):
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Milliy taomlar",
+    "order": 1,
+    "items": [
+      {
+        "id": 2,
+        "category_name": "Milliy taomlar",
+        "created_at": "2026-11-04T08:53:40.708079+05:00",
+        "updated_at": "2026-11-04T08:53:40.708147+05:00",
+        "name": "Lag‘mon",
+        "description": "Qo‘lda cho‘zilgan xamir, go‘sht va sabzavot",
+        "price": "38000.00",
+        "image": null,
+        "preparation_minutes": 25,
+        "available": true,
+        "is_vegetarian": false,
+        "spicy": true,
+        "category": 1
+      }
+    ]
+  }
+]
+```
+
+### 22.2. Sozlamalar: `GET /api/settings/`
+
+```json
+{
+  "created_at": "2026-11-04T08:53:40.704517+05:00",
+  "updated_at": "2026-11-04T08:53:40.704762+05:00",
+  "name": "Choyxona Registon",
+  "phone": "+998712000000",
+  "address": "Toshkent, Amir Temur ko‘chasi, 1",
+  "logo": null,
+  "opens_at": "10:00:00",
+  "closes_at": "23:00:00",
+  "reservation_duration": 120,
+  "booking_days": 30,
+  "service_percent": "10.00"
+}
+```
+
+### 22.3. Bo'sh stollar: `GET /api/tables/available/?start=2026-11-06T18:00:00&guests=4`
+
+Avval eng kichik mos stol chiqadi. Birinchi yozuv:
+
+```json
+[
+  {
+    "id": 3,
+    "location_name": "Zal",
+    "created_at": "2026-11-04T08:53:40.716163+05:00",
+    "updated_at": "2026-11-04T08:53:40.716203+05:00",
+    "number": 3,
+    "seats": 4,
+    "location": "hall",
+    "active": true
+  }
+]
+```
+
+### 22.4. Bron: `POST /api/reservations/` (customer1)
+
+So'rov:
+
+```json
+{
+  "table": 3,
+  "guests": 4,
+  "start": "2026-11-06T18:00:00+05:00",
+  "name": "Ali Valiyev",
+  "phone": "+998901234567",
+  "note": "Deraza yonida"
+}
+```
+
+Javob `201`. `end`, `customer`, `created_by` va `status` serverda qo'yilgan:
+
+```json
+{
+  "id": 1,
+  "table_number": 3,
+  "status_name": "Kutilmoqda",
+  "created_at": "2026-11-04T08:53:46.160827+05:00",
+  "updated_at": "2026-11-04T08:53:46.160959+05:00",
+  "guests": 4,
+  "start": "2026-11-06T18:00:00+05:00",
+  "end": "2026-11-06T20:00:00+05:00",
+  "status": "pending",
+  "name": "Ali Valiyev",
+  "phone": "+998901234567",
+  "note": "Deraza yonida",
+  "customer": 4,
+  "table": 3,
+  "created_by": 4
+}
+```
+
+Xatolar `400`:
+
+```json
+{ "start": ["Bu stol shu vaqtda band."] }
+```
+
+```json
+{ "guests": ["Bu stolga ko‘pi bilan 4 kishi sig‘adi."] }
+```
+
+### 22.5. Buyurtma: `POST /api/orders/` (waiter1)
+
+So'rov:
+
+```json
+{
+  "table": 3,
+  "order_type": "dine_in",
+  "items": [
+    { "menu_item": 1, "quantity": 2, "note": "Kam yog‘li" },
+    { "menu_item": 8, "quantity": 1 }
+  ]
+}
+```
+
+Javob `201`:
+
+```json
+{
+  "id": 1,
+  "items": [
+    {
+      "id": 1,
+      "menu_item": 1,
+      "menu_item_name": "Osh",
+      "quantity": 2,
+      "unit_price": "45000.00",
+      "line_total": "90000.00",
+      "note": "Kam yog‘li"
+    },
+    {
+      "id": 2,
+      "menu_item": 8,
+      "menu_item_name": "Ko‘k choy",
+      "quantity": 1,
+      "unit_price": "8000.00",
+      "line_total": "8000.00",
+      "note": ""
+    }
+  ],
+  "table_number": 3,
+  "status_name": "Yangi",
+  "order_type_name": "Restoranda",
+  "created_at": "2026-11-04T08:53:46.172062+05:00",
+  "updated_at": "2026-11-04T08:53:46.173641+05:00",
+  "order_type": "dine_in",
+  "status": "new",
+  "note": "",
+  "service_percent": "10.00",
+  "subtotal": "98000.00",
+  "service_amount": "9800.00",
+  "total": "107800.00",
+  "paid_at": null,
+  "table": 3,
+  "customer": null,
+  "waiter": 2,
+  "reservation": null
+}
+```
+
+### 22.6. Holat: `POST /api/orders/1/set-status/`
+
+So'rov: `{ "status": "paid" }`. Buyurtma `new` holatida bo'lsa, javob `400`:
+
+```json
+{ "status": ["«Yangi» holatidan «To‘langan» holatiga o‘tib bo‘lmaydi."] }
+```
+
+Oshpaz `cancelled` yuborsa, javob `403`:
+
+```json
+{ "detail": "Oshpaz holatni faqat «cooking» yoki «ready» ga o‘zgartira oladi." }
+```
+
+To'g'ri o'tishda to'liq buyurtma qaytadi. `paid` bo'lganda `paid_at` to'ladi: `"paid_at": "2026-11-04T08:53:46.200127+05:00"`.
+
+### 22.7. Tarix: `GET /api/order-events/?order=1`
+
+Yangisi birinchi. Uch yozuv (`count: 5`, qolganlari qisqartirildi):
+
+```json
+{
+  "count": 5,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 5,
+      "status_name": "To‘langan",
+      "actor_username": "waiter1",
+      "previous_status": "served",
+      "status": "paid",
+      "changed_at": "2026-11-04T08:53:46.200332+05:00",
+      "order": 1,
+      "actor": 2
+    },
+    {
+      "id": 2,
+      "status_name": "Tayyorlanmoqda",
+      "actor_username": "chef1",
+      "previous_status": "new",
+      "status": "cooking",
+      "changed_at": "2026-11-04T08:53:46.185233+05:00",
+      "order": 1,
+      "actor": 3
+    },
+    {
+      "id": 1,
+      "status_name": "Yangi",
+      "actor_username": "waiter1",
+      "previous_status": "",
+      "status": "new",
+      "changed_at": "2026-11-04T08:53:46.173860+05:00",
+      "order": 1,
+      "actor": 2
+    }
+  ]
+}
+```
+
+### 22.8. Hisobot: `GET /api/reports/daily/?date=2026-11-04` (admin)
+
+```json
+{
+  "date": "2026-11-04",
+  "orders_count": 1,
+  "paid_orders_count": 1,
+  "paid_total": "107800.00",
+  "top_items": [
+    { "menu_item": 1, "name": "Osh", "quantity": 2, "revenue": "90000.00" },
+    { "menu_item": 8, "name": "Ko‘k choy", "quantity": 1, "revenue": "8000.00" }
+  ]
+}
+```
+
+---
+
+## 23. Namuna ma'lumot (seed)
+
+```cmd
+python manage.py seed_restaurant
+```
+
+Buyruq `restaurant/management/commands/seed_restaurant.py` da. U `get_or_create` ishlatadi, shuning uchun qayta ishga tushirilsa takrorlamaydi va qo'lda o'zgartirilgan narx yoki parolni ham qayta yozmaydi.
+
+| Nima | Soni |
+| --- | --- |
+| Sozlamalar | 1 ("Choyxona Registon", 10:00–23:00) |
+| Kategoriyalar | 4: Milliy taomlar, Salatlar, Ichimliklar, Shirinliklar |
+| Taomlar | 14: osh, lag'mon, manti, shashlik, achchiq-chuchuk va boshqalar |
+| Stollar | 8: 5 ta zal, 2 ta teras, 1 ta VIP |
+
+Test foydalanuvchilar:
+
+| Login | Parol | Rol |
+| --- | --- | --- |
+| `waiter1` | `Restoran2026!` | Ofitsiant |
+| `chef1` | `Restoran2026!` | Oshpaz |
+| `customer1` | `Restoran2026!` | Mijoz |
+
+> Bu parollar hammaga ochiq, chunki README git'da turadi. Seed'ni faqat ishlab chiqishda ishlating, serverda ishga tushirmang.
+
+Admin rolini sinash uchun `createsuperuser` bilan yaratilgan `admin` hisobidan foydalaning.
+
+---
+
+## 24. Testlarni ishga tushirish
+
+```cmd
+python manage.py test
+python manage.py test api.tests.ChefTests
+python manage.py test api.tests.ReservationTests.test_overlap_rejected
+```
+
+Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.py` da.
+
+| Klass | Nimani tekshiradi |
+| --- | --- |
+| `CatalogPermissionTests` | Menyu, stol va sozlamalarga ruxsatlar; `/api/menu/` filtri; `/api/schema/` |
+| `SettingsSingletonTests` | Yagona yozuv, baza cheklovi, ish vaqti, foiz, logotip formati va hajmi |
+| `ReservationTests` | Rollar, to'qnashuv, sig'im, ish vaqti, o'tgan va uzoq sana, `tables/available` |
+| `OrderCreateTests` | Summalar, yaxlitlash, narx muzlashi, mavjud bo'lmagan taom, `dine_in` da stol |
+| `OrderPermissionTests` | Har bir rol uchun buyurtmaga ruxsatlar |
+| `OrderStatusTests` | To'g'ri va noto'g'ri o'tishlar, tarix, `paid_at` |
+| `ChefTests` | Oshpaz cheklovlari va `orders/kitchen` |
+| `OrderEventTests` | Tarix faqat o'qish uchun, rol bo'yicha filtr |
+| `ProtectedDeleteTests` | `ProtectedError` → 400 |
+| `DailyReportTests` | Hisobot ruxsati va qiymatlari |
+| `BookTests` | `Book` CRUD |
+| `AdminTests` | Admin sahifalari, yagona sozlama, bron va buyurtma qo'shish |
+| `SeedTests` | Seed takrorlamasligi |
+
+---
+
+## 25. Tarix: klinikadan restoranga o'tish
+
+Loyiha dastlab **Medora Clinic** (shifokorlar, bemorlar, qabullar) API'si edi. 2026-11-04 da u restoranga o'tkazildi:
+
+```cmd
+python manage.py migrate clinic zero
+```
+
+Bu buyruq klinika jadvallarini o'chirdi (ularda yozuv yo'q edi). Uni `INSTALLED_APPS` dan olib tashlashdan **oldin** bajarish shart edi: keyin Django `clinic` migratsiyalarini topa olmaydi va jadvallar bazada qolib ketadi. Shundan so'ng `clinic` app'i o'chirildi va uning o'rniga `restaurant` yozildi. Klinika kodini git tarixidan ko'rish mumkin (`git show 9f70d0d`).
+
+Avvalgi bosqichdan bitta muhim saboq: git repozitoriyasi bir vaqtlar xato bilan `C:\Users\user` da ochilgan edi, u bo'sh bo'lgani uchun o'chirilib, `Rest` ichida qayta ochildi. `git add .` dan oldin `git status` ni tekshirishni unutmang: aks holda SSH kalitlari va shaxsiy fayllar repozitoriyaga tushib qolishi mumkin.

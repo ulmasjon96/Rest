@@ -2,25 +2,22 @@ from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    BookViewSet, ClinicSettingsView, DepartmentViewSet, RoomViewSet, SpecialtyViewSet,
-    DoctorViewSet, WorkHourViewSet, DayOffViewSet, PatientViewSet, AppointmentViewSet,
-    AppointmentStatusEventViewSet, DirectionEventViewSet, AuditViewSet,
+    BookViewSet, CategoryViewSet, DailyReportView, MenuItemViewSet, MenuView, OrderStatusEventViewSet,
+    OrderViewSet, ProfileViewSet, ReservationViewSet, RestaurantSettingsView, TableViewSet,
 )
 
 router = DefaultRouter()
 router.register('books', BookViewSet)
-router.register('departments', DepartmentViewSet)
-router.register('rooms', RoomViewSet)
-router.register('specialties', SpecialtyViewSet)
-router.register('doctors', DoctorViewSet)
-router.register('work-hours', WorkHourViewSet)
-router.register('days-off', DayOffViewSet)
-router.register('patients', PatientViewSet)
-router.register('appointments', AppointmentViewSet)
-router.register('status-events', AppointmentStatusEventViewSet)
-router.register('directions', DirectionEventViewSet)
-router.register('audit', AuditViewSet)
+router.register('categories', CategoryViewSet)
+router.register('menu-items', MenuItemViewSet)
+router.register('tables', TableViewSet)
+router.register('reservations', ReservationViewSet)
+router.register('orders', OrderViewSet)
+router.register('profiles', ProfileViewSet)
+router.register('order-events', OrderStatusEventViewSet)
 
 urlpatterns = [
-    path('clinic-settings/', ClinicSettingsView.as_view()),
+    path('settings/', RestaurantSettingsView.as_view()),
+    path('menu/', MenuView.as_view()),
+    path('reports/daily/', DailyReportView.as_view()),
 ] + router.urls
