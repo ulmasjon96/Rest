@@ -23,7 +23,7 @@ from restaurant.models import (
 )
 from .models import Book, Product
 from .permissions import (
-    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, IsOwnerOrAdmin, IsProductOwnerOrAdmin, IsSelfOrAdminForWrite,
+    IsAdminOrReadOnly, IsAdminRole, IsKitchenStaff, IsOwnerOrAdmin, IsProductOwner, IsSelfOrAdminForWrite,
     OrderPermission, ReservationPermission, get_role,
 )
 from .serializers import (
@@ -66,8 +66,8 @@ class BookViewSet(viewsets.ModelViewSet):
     list=extend_schema(summary='Mahsulotlar ro‘yxati (hamma uchun ochiq)', tags=['products']),
     retrieve=extend_schema(summary='Mahsulot tafsiloti (login qilganlar)', tags=['products']),
     create=extend_schema(summary='Mahsulot qo‘shish (login qilganlar)', tags=['products']),
-    update=extend_schema(summary='Mahsulotni to‘liq tahrirlash (egasi yoki admin)', tags=['products']),
-    partial_update=extend_schema(summary='Mahsulotni qisman tahrirlash (egasi yoki admin)', tags=['products']),
+    update=extend_schema(summary='Mahsulotni to‘liq tahrirlash (faqat egasi)', tags=['products']),
+    partial_update=extend_schema(summary='Mahsulotni qisman tahrirlash yoki yashirish (faqat egasi)', tags=['products']),
 )
 class ProductViewSet(
     mixins.ListModelMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin, mixins.UpdateModelMixin,
@@ -92,10 +92,8 @@ class ProductViewSet(
     def get_permissions(self):
         if self.action == 'list':
             return [permissions.AllowAny()]
-        if self.action in ('hide', 'unhide'):
-            return [permissions.IsAuthenticated(), IsAdminRole()]
         if self.action in ('update', 'partial_update'):
-            return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
+            return [permissions.IsAuthenticated(), IsProductOwner()]
         # retrieve, create va boshqa har qanday amal (OPTIONS ham): yangi action tasodifan ochiq qolmaydi.
         return [permissions.IsAuthenticated()]
 
@@ -104,24 +102,6 @@ class ProductViewSet(
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
-
-    @action(detail=True, methods=['post'])
-    @extend_schema(summary='Mahsulotni yashirish (admin)', tags=['products'])
-    def hide(self, request, *args, **kwargs):
-        product = self.get_object()
-        if product.is_active:
-            product.is_active = False
-            product.save(update_fields=['is_active', 'updated_at'])
-        return Response(self.get_serializer(product).data)
-
-    @action(detail=True, methods=['post'])
-    @extend_schema(summary='Mahsulotni qayta ko‘rsatish (admin)', tags=['products'])
-    def unhide(self, request, *args, **kwargs):
-        product = self.get_object()
-        if not product.is_active:
-            product.is_active = True
-            product.save(update_fields=['is_active', 'updated_at'])
-        return Response(self.get_serializer(product).data)
 
 
 @extend_schema_view(

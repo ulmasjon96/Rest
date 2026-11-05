@@ -5,6 +5,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.fields import empty
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from restaurant.models import (
@@ -82,9 +83,9 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
     def get_fields(self):
         fields = super().get_fields()
-        request = self.context.get('request')
-        if request is None or get_role(request.user) != Profile.ADMIN:
-            fields['is_active'].read_only = True
+        # Multipart so'rovda yuborilmagan BooleanField DRF da False bo'ladi:
+        # rasmli POST yoki PUT mahsulotni o'zidan o'zi yashirib qo'ymasin.
+        fields['is_active'].default_empty_html = empty
         return fields
 
     def update(self, instance, validated_data):

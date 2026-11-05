@@ -1671,7 +1671,7 @@ class ProductAPITests(APITestCase):
             self.client.patch(self.detail_url, {'name': 'Buzildi'}, format='json'),
         ):
             self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-            self.assertEqual(response.data['detail'], 'Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi.')
+            self.assertEqual(response.data['detail'], 'Bu mahsulotni faqat uni yaratgan foydalanuvchi o‘zgartira oladi.')
         self.product.refresh_from_db()
         self.assertEqual(self.product.name, 'Non')
 
@@ -1710,12 +1710,12 @@ class ProductAPITests(APITestCase):
         self.assertEqual(self.product.quantity, 7)
         self.assertEqual(self.product.name, 'Non')
 
-    def test_regular_user_cannot_change_is_active(self):
+    def test_regular_owner_can_change_is_active(self):
         self.client.force_authenticate(user=self.owner)
         response = self.client.patch(self.detail_url, {'is_active': False}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.product.refresh_from_db()
-        self.assertTrue(self.product.is_active)
+        self.assertFalse(self.product.is_active)
 
     def test_ownership_cannot_be_transferred(self):
         self.client.force_authenticate(user=self.owner)
@@ -1733,51 +1733,6 @@ class ProductAPITests(APITestCase):
                 self.assertNotIn('DELETE', response.headers['Allow'])
                 self.assertEqual(response.data['detail'], '«DELETE» metodi ruxsat etilmagan.')
         self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
-
-    # --- Admin ---
-
-    def test_admin_role_and_superuser_can_change_others(self):
-        for user in (self.admin, self.root):
-            with self.subTest(user=user.username):
-                product = Product.objects.create(name='Tahrir', price=Decimal('1'), created_by=self.owner)
-                url = f'{self.URL}{product.pk}/'
-                self.client.force_authenticate(user=user)
-                response = self.client.patch(url, {'name': 'Admin tahriri'}, format='json')
-                self.assertEqual(response.status_code, status.HTTP_200_OK)
-                self.assertEqual(response.data['created_by'], 'owner')   # egasi o'zgarmaydi
-                product.refresh_from_db()
-                self.assertEqual(product.name, 'Admin tahriri')
-
-    def test_admin_role_and_superuser_can_hide_and_unhide(self):
-        for user in (self.admin, self.root):
-            with self.subTest(user=user.username):
-                product = Product.objects.create(name='Yashiriladigan', price=Decimal('1'), created_by=self.owner)
-                self.client.force_authenticate(user=user)
-                response = self.client.post(f'{self.URL}{product.pk}/hide/')
-                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-                product.refresh_from_db()
-                self.assertFalse(product.is_active)
-                self.assertEqual(self.client.get(f'{self.URL}{product.pk}/').status_code, status.HTTP_404_NOT_FOUND)
-
-                response = self.client.post(f'{self.URL}{product.pk}/unhide/')
-                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
-                product.refresh_from_db()
-                self.assertTrue(product.is_active)
-
-    def test_only_admin_and_superuser_can_hide_or_unhide(self):
-        for user, expected in ((self.owner, status.HTTP_403_FORBIDDEN), (self.other, status.HTTP_403_FORBIDDEN), (None, status.HTTP_401_UNAUTHORIZED)):
-            with self.subTest(user=getattr(user, 'username', 'anonymous')):
-                self.client.force_authenticate(user=user)
-                self.assertEqual(self.client.post(f'{self.detail_url}hide/').status_code, expected)
-                self.assertEqual(self.client.post(f'{self.detail_url}unhide/').status_code, expected)
-        self.assertTrue(self.product.is_active)
-
-    def test_admin_can_set_is_active_directly(self):
-        self.client.force_authenticate(user=self.admin)
-        response = self.client.patch(self.detail_url, {'is_active': False}, format='json')
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.product.refresh_from_db()
-        self.assertFalse(self.product.is_active)
 
     # --- Validatsiya ---
 
@@ -1872,16 +1827,6 @@ class ProductAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_302_FOUND)
         self.assertEqual(Product.objects.get(name='Paneldan').created_by, self.root)
         self.assertEqual(self.client.get(reverse('admin:api_product_changelist')).status_code, status.HTTP_200_OK)
-
-    def test_admin_edit_keeps_created_by(self):
-        self.client.force_login(self.root)
-        response = self.client.post(reverse('admin:api_product_change', args=[self.product.pk]), {
-            'name': 'Tahrirlandi', 'description': '', 'price': '100', 'quantity': 1,
-        })
-        self.assertEqual(response.status_code, status.HTTP_302_FOUND)
-        self.product.refresh_from_db()
-        self.assertEqual(self.product.name, 'Tahrirlandi')
-        self.assertEqual(self.product.created_by, self.owner)
 
     def test_creator_with_products_is_protected(self):
         with self.assertRaises(ProtectedError):
@@ -2103,6 +2048,200 @@ class MyProductTests(APITestCase):
         self.assertNotIn('delete', schema['/api/products/{id}/'])
         self.assertEqual(set(schema['/api/users/me/products/{id}/']), {'get', 'delete'})
         self.assertEqual(schema['/api/users/me/products/{id}/']['delete']['tags'], ['users'])
+
+
+class ProductOwnershipTestBase(APITestCase):
+    """Ikki admin (panelga kira oladi), superuser va oddiy foydalanuvchi: mahsulot admin1 niki."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin1 = User.objects.create_user('admin1', password='x', is_staff=True)
+        cls.admin2 = User.objects.create_user('admin2', password='x', is_staff=True)
+        Profile.objects.create(user=cls.admin1, role=Profile.ADMIN)
+        Profile.objects.create(user=cls.admin2, role=Profile.ADMIN)
+        cls.root = User.objects.create_superuser('root', password='x')
+        cls.customer = User.objects.create_user('mijoz', password='x')
+        Profile.objects.create(user=cls.customer, role=Profile.CUSTOMER)
+        cls.product = Product.objects.create(name='Non', price=Decimal('5000'), quantity=20, created_by=cls.admin1)
+
+    def snapshot(self):
+        return Product.objects.filter(pk=self.product.pk).values().get()
+
+
+class ProductOwnershipAPITests(ProductOwnershipTestBase):
+    PUT_DATA = {'name': 'Yangi', 'description': 'Tavsif', 'price': '1.00', 'quantity': 1}
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.url = f'/api/products/{cls.product.pk}/'
+        cls.my_url = f'/api/users/me/products/{cls.product.pk}/'
+
+    def test_admin_adds_product_and_becomes_owner(self):
+        self.client.force_authenticate(user=self.admin2)
+        response = self.client.post('/api/products/', {'name': 'Choy', 'price': '10'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data['created_by'], 'admin2')
+
+    def test_non_owners_cannot_change_hide_or_delete(self):
+        before = self.snapshot()
+        for user in (self.admin2, self.root, self.customer):
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                for response in (
+                    self.client.put(self.url, self.PUT_DATA, format='json'),
+                    self.client.patch(self.url, {'name': 'Buzildi'}, format='json'),
+                    self.client.patch(self.url, {'is_active': False}, format='json'),
+                ):
+                    self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+                    self.assertEqual(response.data['detail'], 'Bu mahsulotni faqat uni yaratgan foydalanuvchi o‘zgartira oladi.')
+                self.assertEqual(self.client.delete(self.my_url).status_code, status.HTTP_404_NOT_FOUND)
+                self.assertEqual(self.client.delete(self.url).status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+                self.assertEqual(self.snapshot(), before)
+
+    def test_owner_admin_can_put_patch_hide_and_delete(self):
+        self.client.force_authenticate(user=self.admin1)
+        response = self.client.put(self.url, self.PUT_DATA, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(self.snapshot()['name'], 'Yangi')
+
+        response = self.client.patch(self.url, {'quantity': 7}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(self.snapshot()['quantity'], 7)
+
+        response = self.client.patch(self.url, {'is_active': False}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertFalse(self.snapshot()['is_active'])
+        self.assertEqual(self.snapshot()['created_by_id'], self.admin1.pk)
+
+        self.assertEqual(self.client.delete(self.my_url).status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+
+    def test_superuser_and_regular_user_manage_only_own(self):
+        for user in (self.root, self.customer):
+            with self.subTest(user=user.username):
+                own = Product.objects.create(name='O‘ziniki', price=Decimal('1'), created_by=user)
+                self.client.force_authenticate(user=user)
+                response = self.client.patch(f'/api/products/{own.pk}/', {'name': 'Yangi', 'is_active': False}, format='json')
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                own.refresh_from_db()
+                self.assertEqual(own.name, 'Yangi')
+                self.assertFalse(own.is_active)
+                self.assertEqual(self.client.patch(self.url, {'name': 'X'}, format='json').status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_hide_and_unhide_endpoints_are_gone(self):
+        before = self.snapshot()
+        for user in (self.admin1, self.admin2, self.root, self.customer):
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.post(f'{self.url}hide/').status_code, status.HTTP_404_NOT_FOUND)
+                self.assertEqual(self.client.post(f'{self.url}unhide/').status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.snapshot(), before)
+        paths = self.client.get('/api/schema/', {'format': 'json'}).data['paths']
+        self.assertFalse([path for path in paths if path.endswith(('/hide/', '/unhide/'))])
+
+    def test_hidden_product_is_visible_only_in_owner_profile(self):
+        self.client.force_authenticate(user=self.admin1)
+        self.client.patch(self.url, {'is_active': False}, format='json')
+        for user in (None, self.admin1, self.admin2, self.root):
+            with self.subTest(user=getattr(user, 'username', 'anonymous')):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.get('/api/products/').data['count'], 0)
+                expected = status.HTTP_404_NOT_FOUND if user else status.HTTP_401_UNAUTHORIZED
+                self.assertEqual(self.client.get(self.url).status_code, expected)
+
+        self.client.force_authenticate(user=self.admin1)
+        self.assertFalse(self.client.get('/api/users/me/products/').data['results'][0]['is_active'])
+        self.assertFalse(self.client.get(self.my_url).data['is_active'])
+        self.client.force_authenticate(user=self.admin2)
+        self.assertEqual(self.client.get('/api/users/me/products/').data['count'], 0)
+        self.assertEqual(self.client.get(self.my_url).status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_only_owner_can_unhide(self):
+        Product.objects.filter(pk=self.product.pk).update(is_active=False)
+        for user in (self.admin2, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_authenticate(user=user)
+                self.assertEqual(self.client.patch(self.url, {'is_active': True}, format='json').status_code, status.HTTP_403_FORBIDDEN)
+                self.assertFalse(self.snapshot()['is_active'])
+
+        self.client.force_authenticate(user=self.admin1)
+        response = self.client.patch(self.url, {'is_active': True}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(self.snapshot()['is_active'])
+        self.assertEqual(self.client.get('/api/products/').data['count'], 1)
+
+    def test_multipart_without_is_active_does_not_hide(self):
+        self.client.force_authenticate(user=self.customer)
+        created = self.client.post('/api/products/', {'name': 'Rasmsiz', 'price': '1'}, format='multipart')
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        self.assertTrue(created.data['is_active'])
+
+        url = f"/api/products/{created.data['id']}/"
+        response = self.client.put(url, {'name': 'Yangi', 'price': '2'}, format='multipart')
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(response.data['is_active'])
+
+        response = self.client.patch(url, {'is_active': 'false'}, format='multipart')
+        self.assertFalse(response.data['is_active'])
+
+
+class ProductOwnershipAdminPanelTests(ProductOwnershipTestBase):
+    FORM = {'name': 'Paneldan', 'description': '', 'price': '100', 'quantity': 1, 'is_active': 'on'}
+
+    def change_url(self, product=None):
+        return reverse('admin:api_product_change', args=[(product or self.product).pk])
+
+    def test_non_owner_can_view_but_not_save(self):
+        before = self.snapshot()
+        for user in (self.admin2, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                page = self.client.get(self.change_url())
+                self.assertEqual(page.status_code, status.HTTP_200_OK)
+                self.assertNotContains(page, 'name="_save"')
+                self.assertEqual(self.client.post(self.change_url(), self.FORM).status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(self.snapshot(), before)
+
+    def test_owner_can_save_own_and_owner_is_kept(self):
+        for owner, product in (
+            (self.admin1, self.product),
+            (self.root, Product.objects.create(name='Rootniki', price=Decimal('1'), created_by=self.root)),
+        ):
+            with self.subTest(user=owner.username):
+                self.client.force_login(owner)
+                self.assertContains(self.client.get(self.change_url(product)), 'name="_save"')
+                response = self.client.post(self.change_url(product), self.FORM)
+                self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+                product.refresh_from_db()
+                self.assertEqual(product.name, 'Paneldan')
+                self.assertEqual(product.created_by, owner)
+
+    def test_list_is_viewable_but_not_editable(self):
+        before = self.snapshot()
+        url = reverse('admin:api_product_changelist')
+        for user in (self.admin1, self.admin2, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                page = self.client.get(url)
+                self.assertEqual(page.status_code, status.HTTP_200_OK)
+                self.assertContains(page, 'Non')
+                self.assertNotContains(page, 'form-0-is_active')
+                self.assertNotContains(page, 'delete_selected')
+                # list_editable formasini qo'lda yuborish ham hech narsani o'zgartirmaydi.
+                self.client.post(url, {
+                    'form-TOTAL_FORMS': 1, 'form-INITIAL_FORMS': 1, 'form-0-id': self.product.pk, '_save': 'Saqlash',
+                })
+                self.assertEqual(self.snapshot(), before)
+
+    def test_delete_page_is_403_for_everyone(self):
+        url = reverse('admin:api_product_delete', args=[self.product.pk])
+        for user in (self.admin1, self.admin2, self.root):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                self.assertEqual(self.client.get(url).status_code, status.HTTP_403_FORBIDDEN)
+                self.assertEqual(self.client.post(url, {'post': 'yes'}).status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Product.objects.filter(pk=self.product.pk).exists())
 
 
 class ProductAdminDeleteTests(APITestCase):

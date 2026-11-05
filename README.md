@@ -1472,7 +1472,9 @@ Testlar vaqtinchalik bazada ishlaydi, `db.sqlite3` ga tegmaydi. Ular `api/tests.
 | `LogoutTests`            | 205, noto'g'ri token 400, begona token, keyin refresh ishlamasligi                                            |
 | `ThrottleTests`          | 429: login, register, change-password, anon, user, Basic orqali va `X-Forwarded-For` bilan aylanib o'tish     |
 | `UzbekMessageTests`      | `simplejwt` va DRF xabarlari o'zbekcha, `code` o'zgarmagan                                                    |
-| `ProductAPITests`        | Ro'yxat, tafsilot, ruxsatlar, egasi va admin, narx, nom va rasm validatsiyasi, qidiruv, saralash, admin panel |
+| `ProductAPITests`        | Ro'yxat, tafsilot, ruxsatlar, egasi, narx, nom va rasm validatsiyasi, qidiruv, saralash, admin panelda qo'shish |
+| `ProductOwnershipAPITests` | Egalik: `admin1`, `admin2`, superuser va mijoz; PUT, PATCH, `is_active`, DELETE; `hide`/`unhide` yo'qligi; multipart yashirib qo'ymasligi |
+| `ProductOwnershipAdminPanelTests` | Admin panelda boshqaning mahsuloti faqat ko'rish uchun (POST 403), o'zinikini saqlash, ro'yxat tahrirlanmasligi, o'chirish 403 |
 | `MyProductTests` | Mening mahsulotlarim, begona mahsulot 404, egasi 204, rasm fayli o'chishi, ProtectedError 400 |
 | `ProductAdminDeleteTests` | Admin panelda o'chirish sahifasi 403, `delete_selected` yo'q |
 
@@ -1919,7 +1921,7 @@ To'liq ro'yxat: `TRANSLATIONS` lug'ati.
 
 ## 27. Mahsulotlar API
 
-Mahsulotlar ro'yxati ochiq, tafsilot va qo'shish uchun login kerak, tahrirlashni egasi yoki admin qiladi. O'chirishni **faqat yaratuvchisi, o'z profili orqali** qiladi (27.6-bo'lim). Admin va superuser mahsulotni o'chirmasdan yashirishi yoki qayta ko'rsatishi mumkin. Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`.
+Mahsulotlar ro'yxati ochiq, tafsilot va qo'shish uchun login kerak. Tahrirlash, yashirish va o'chirishni **faqat mahsulotni qo'shgan foydalanuvchi** qiladi: admin roli, superuser yoki bir nechta admin bo'lishi bu qoidani o'zgartirmaydi. O'chirish o'z profili orqali bo'ladi (27.6-bo'lim). Kod: `api/models.py`, `api/serializers.py`, `api/permissions.py`, `api/views.py`, `api/admin.py`.
 
 ### 27.1. Model maydonlari
 
@@ -1939,18 +1941,33 @@ Standart tartib: eng yangisi birinchi. `PROTECT` sababli mahsuloti bor foydalanu
 
 ### 27.2. Ruxsatlar
 
+**Egalik qoidasi:**
+
+| Kim | Ko'rish | Qo'shish | Tahrirlash | Yashirish | O'chirish |
+| --- | --- | --- | --- | --- | --- |
+| Egasi | Ro'yxat, detail; yashirinini profilida | 201 | 200 | 200 (`PATCH is_active`) | 204 (faqat profil orqali) |
+| Boshqa foydalanuvchi | Ro'yxat, faol detail | 201 | 403 | 403 | 404 (profil), 405 (umumiy manzil) |
+| `admin` roli | Ro'yxat, faol detail | 201 | 403 | 403 | 404 (profil), 405 (umumiy manzil) |
+| Superuser | Ro'yxat, faol detail | 201 | 403 | 403 | 404 (profil), 405 (umumiy manzil) |
+| Anonim | Faqat ro'yxat (detail 401) | 401 | 401 | 401 | 401 |
+
+Admin rolidagi yoki superuser foydalanuvchi o'zi qo'shgan mahsulot uchun "egasi" qatoriga tushadi: hal qiluvchi narsa rol emas, egalik.
+
+> **Ogohlantirish: egasiz qolgan mahsulotlar.** Egasi hisobini o'chirsa, nofaol qilinsa (26.4-bo'lim) yoki unga kira olmasa, uning mahsulotini API va admin panel orqali **hech kim** tahrirlay, yashira yoki o'chira olmaydi. Mahsulot `is_active=True` bo'lsa, ochiq katalogda qolaveradi, noqonuniy yoki eskirgan bo'lsa ham. Foydalanuvchini nofaol qilishdan oldin undan mahsulotlarini yashirish yoki o'chirishni so'rang. Bunday yozuvni faqat server egasi `python manage.py shell` yoki baza orqali o'zgartira oladi; bu dastur qoidasidan tashqaridagi amal.
+
 | Amal              | Metod | URL | Kim | Javob | Xatolar |
 | ----------------- | ----- | --- | --- | ----- | ------- |
 | Ro'yxat | GET | `/api/products/` | Hamma, faqat faol mahsulotlar | 200 | 429 |
 | Tafsilot | GET | `/api/products/{id}/` | Login qilganlar, faqat faol mahsulot | 200 | 401, 404 |
 | Qo'shish | POST | `/api/products/` | Login qilganlar | 201 | 400, 401 |
-| To'liq tahrirlash | PUT | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
-| Qisman tahrirlash | PATCH | `/api/products/{id}/` | Egasi yoki admin | 200 | 400, 401, 403, 404 |
-| Yashirish | POST | `/api/products/{id}/hide/` | Admin roli yoki superuser | 200 | 401, 403, 404 |
-| Qayta ko'rsatish | POST | `/api/products/{id}/unhide/` | Admin roli yoki superuser | 200 | 401, 403, 404 |
+| To'liq tahrirlash | PUT | `/api/products/{id}/` | Faqat egasi | 200 | 400, 401, 403, 404 |
+| Qisman tahrirlash | PATCH | `/api/products/{id}/` | Faqat egasi | 200 | 400, 401, 403, 404 |
+| Yashirish, qayta ko'rsatish | PATCH | `/api/products/{id}/` (`is_active`) | Faqat egasi | 200 | 400, 401, 403, 404 |
 | O'chirish | DELETE | `/api/products/{id}/` | Ulanmagan; profil orqali (27.6-bo'lim) | 405 | Anonimga 401 |
 
-Admin deganda `admin` roli yoki superuser tushuniladi. `waiter` va `chef` bu yerda oddiy foydalanuvchi kabi: o'z mahsulotini boshqaradi, boshqanikini yo'q. Admin boshqaning mahsulotini o'chira olmaydi; admin o'zi yaratgan mahsulotni esa o'z profilidan o'chiradi. Admin yoki superuser `is_active` ni boshqaradi, oddiy foydalanuvchi uchun bu maydon read-only. Admin tahrirlaganda ham `created_by` o'zgarmaydi.
+Hech qanday rol istisno emas: `admin`, `waiter`, `chef` va superuser ham o'z mahsulotini boshqaradi, boshqanikini yo'q. `created_by` hech qachon o'zgarmaydi, shuning uchun egalikni boshqaga o'tkazib bo'lmaydi. `POST .../hide/` va `.../unhide/` olib tashlangan (404).
+
+**Multipart va `is_active`:** DRF multipart yoki forma so'rovida yuborilmagan `BooleanField` ni `False` deb oladi, shunda rasmli `POST` yoki `PUT` mahsulotni jimgina yashirib qo'yardi. `ProductDetailSerializer` da bu o'chirilgan: yuborilmagan `is_active` o'zgarmaydi. Yashirish uchun qiymatni aniq yuboring (`-F "is_active=false"`). Shu sababli DRF brauzer sahifasining HTML formasida belgini olib tashlash yetarli emas, u yerda **Raw data** dan foydalaning.
 
 Ro'yxat parametrlari:
 
@@ -1965,7 +1982,7 @@ Ro'yxat parametrlari:
 
 |             | `ProductListSerializer`        | `ProductDetailSerializer`                                      |
 | ----------- | ------------------------------ | -------------------------------------------------------------- |
-| Qachon      | `list`                         | `retrieve`, `create`, `update`, `partial_update`, hide/unhide   |
+| Qachon      | `list`                         | `retrieve`, `create`, `update`, `partial_update`               |
 | Maydonlar   | `id`, `name`, `price`, `image` | Hammasi, shu jumladan `is_active`                              |
 | Kim ko'radi | Hamma, faol mahsulotlar        | Login qilganlar; yashirinini egasi profilidagi endpointda ko'radi |
 
@@ -1989,10 +2006,8 @@ def get_serializer_class(self):
 def get_permissions(self):
     if self.action == 'list':
         return [permissions.AllowAny()]
-    if self.action in ('hide', 'unhide'):
-        return [permissions.IsAuthenticated(), IsAdminRole()]
     if self.action in ('update', 'partial_update'):
-        return [permissions.IsAuthenticated(), IsProductOwnerOrAdmin()]
+        return [permissions.IsAuthenticated(), IsProductOwner()]
     return [permissions.IsAuthenticated()]
 ```
 
@@ -2001,16 +2016,14 @@ def get_permissions(self):
 | `GET /api/products/`      | `list`             | `AllowAny`                                  |
 | `GET /api/products/5/`    | `retrieve`         | `IsAuthenticated`                           |
 | `POST /api/products/`     | `create`           | `IsAuthenticated`                           |
-| `PUT /api/products/5/`    | `update`           | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
-| `PATCH /api/products/5/`  | `partial_update`   | `IsAuthenticated` + `IsProductOwnerOrAdmin` |
-| `POST /api/products/5/hide/` | `hide`          | `IsAuthenticated` + admin roli yoki superuser |
-| `POST /api/products/5/unhide/` | `unhide`      | `IsAuthenticated` + admin roli yoki superuser |
+| `PUT /api/products/5/`    | `update`           | `IsAuthenticated` + `IsProductOwner`        |
+| `PATCH /api/products/5/`  | `partial_update`   | `IsAuthenticated` + `IsProductOwner`        |
 | `DELETE /api/products/5/` | `None` (ulanmagan) | `IsAuthenticated`, keyin 405 |
 | `OPTIONS` va boshqalar    | `metadata` va h.k. | `IsAuthenticated`                           |
 
 - **Oxirgi qator ataylab eng qattiq emas, lekin yopiq:** keyin yangi action qo'shilib, ro'yxatga kiritish unutilsa, u tasodifan hammaga ochiq bo'lib qolmaydi.
-- **`has_permission` va `has_object_permission`:** `IsAuthenticated` so'rov boshida ishlaydi (anonim: `401`). `IsProductOwnerOrAdmin` esa `get_object()` chaqirilganda aniq mahsulot bilan ishlaydi (begona: `403`). Batafsil: 26.5-bo'lim.
-- Ochiq `list` va `retrieve` queryset'i `is_active=True` bilan cheklanadi. `hide`/`unhide` actionlari yashirin yozuvni ham ID orqali topishi uchun umumiy querysetni ishlatadi.
+- **`has_permission` va `has_object_permission`:** `IsAuthenticated` so'rov boshida ishlaydi (anonim: `401`). `IsProductOwner` esa `get_object()` chaqirilganda aniq mahsulot bilan ishlaydi (begona: `403`). U rolni ataylab tekshirmaydi. Batafsil: 26.5-bo'lim.
+- Ochiq `list` va `retrieve` queryset'i `is_active=True` bilan cheklanadi. `update` va `partial_update` umumiy querysetni ishlatadi: egasi yashirgan mahsulotini `PATCH` bilan qayta ko'rsata olishi kerak. Shu sababli boshqa foydalanuvchi yashirin mahsulotni tahrirlamoqchi bo'lsa `403` oladi va `id` band ekanini bilishi mumkin, mazmunini esa ko'rmaydi.
 
 ### 27.5. CMD uchun curl misollari
 
@@ -2178,15 +2191,15 @@ curl -X PATCH http://127.0.0.1:8000/api/products/2/ -H "Authorization: Bearer %A
 }
 ```
 
-Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT` va `PATCH` uchun (`403`):
+Boshqa foydalanuvchi (`waiter1`, `admin` roli yoki superuser) urinsa, `PUT` va `PATCH` uchun (`403`):
 
 ```json
-{ "detail": "Bu mahsulotni faqat uni yaratgan foydalanuvchi yoki administrator o‘zgartira oladi." }
+{ "detail": "Bu mahsulotni faqat uni yaratgan foydalanuvchi o‘zgartira oladi." }
 ```
 
 ### 27.6. O'chirish qoidasi va "Mening mahsulotlarim"
 
-**Qoida:** mahsulotni faqat uni qo'shgan foydalanuvchi va faqat o'z profili orqali o'chira oladi. Admin roli va superuser boshqaning mahsulotini tahrirlay oladi (`PUT`, `PATCH`), lekin o'chira olmaydi.
+**Qoida:** mahsulotni faqat uni qo'shgan foydalanuvchi va faqat o'z profili orqali o'chira oladi. Admin roli va superuser boshqaning mahsulotini tahrirlay ham, yashira ham, o'chira ham olmaydi.
 
 | Qayerdan | Egasi | Boshqa foydalanuvchi | `admin` roli | Superuser | Anonim |
 | --- | --- | --- | --- | --- | --- |
@@ -2196,7 +2209,7 @@ Boshqa foydalanuvchi (`waiter1`) urinsa, `PUT` va `PATCH` uchun (`403`):
 
 Admin yoki superuserning o'zi qo'shgan mahsulot bo'lsa, ular ham uni o'z profilidan o'chiradi (204): bu yerda hal qiluvchi narsa rol emas, egalik.
 
-`POST /api/products/{id}/hide/` va `/unhide/` faqat `admin` roli yoki superuserga ruxsat etiladi. Bu amallar mahsulotni bazadan o'chirmaydi: `is_active=False` katalog va umumiy detail'dan yashiradi, `is_active=True` esa qayta ko'rsatadi. Yashirilgan mahsulot egasining `/api/users/me/products/` ro'yxatida `is_active` qiymati bilan qoladi. Oddiy foydalanuvchi `is_active` maydonini PUT/PATCH bilan o'zgartira olmaydi.
+Yashirish egasining `PATCH /api/products/{id}/` so'rovi bilan bo'ladi va mahsulotni bazadan o'chirmaydi: `is_active=false` katalog va umumiy detail'dan yashiradi, `is_active=true` esa qayta ko'rsatadi. Yashirilgan mahsulot egasining `/api/users/me/products/` ro'yxatida `is_active` qiymati bilan qoladi. Boshqa har kim uchun bu `PATCH` 403.
 
 **Endpointlar** (`MyProductViewSet`, hammasi `IsAuthenticated`):
 
@@ -2216,9 +2229,18 @@ Admin yoki superuserning o'zi qo'shgan mahsulot bo'lsa, ular ham uni o'z profili
 
 **Rasm fayli:** `api/models.py` dagi `post_delete` signali mahsulot o'chganda rasmni `transaction.on_commit` ichida o'chiradi. PUT/PATCH bilan rasm almashtirilsa, eski fayl tranzaksiya muvaffaqiyatli yakunlangach tozalanadi; `PATCH {"image": null}` rasmni olib tashlaydi va eski faylni ham o'chiradi. Baza o'zgarishi bekor qilinsa, eski fayl joyida qoladi.
 
-**Admin panel:** `ProductAdmin.has_delete_permission` har doim `False`. O'chirish sahifasi 403 qaytaradi, Django esa `delete_selected` amalini shu huquqqa qarab ro'yxatdan o'zi olib tashlaydi. Bu superuserga ham taalluqli.
+**Admin panel** (`ProductAdmin`, superuserga ham taalluqli):
 
-> **Oqibat:** egasi hisobini o'chirsa (26.4-bo'lim) yoki unga kira olmasa, uning mahsulotlarini API va admin panel orqali hech kim o'chira olmaydi. Mahsulot ochiq katalogda qolishi mumkin; admin uni `hide` actioni yoki admin panel orqali yashirishi mumkin.
+| Huquq | Qiymat | Natija |
+| --- | --- | --- |
+| `has_view_permission` | Har doim `True` | Panelga kira oladigan (`is_staff`) har kim ro'yxatni va mahsulot sahifasini ko'radi, yashirinini ham |
+| `has_change_permission` | `obj` yo'q bo'lsa `True`; aks holda `obj.created_by == request.user` | Boshqaning mahsuloti faqat o'qish uchun ochiladi, unga `POST` 403 |
+| `has_delete_permission` | Har doim `False` | O'chirish sahifasi 403, `delete_selected` amali ro'yxatdan yo'qoladi |
+| `list_editable` | Olib tashlangan | Ro'yxatning o'zidan hech narsani o'zgartirib bo'lmaydi |
+
+Bu qoidalar Django'ning guruh va foydalanuvchi huquqlaridan ustun turadi. `api` bo'limi esa bosh sahifada Django huquqiga qarab ko'rinadi, shuning uchun huquqi yo'q `is_staff` foydalanuvchi mahsulotlar sahifasini faqat to'g'ridan-to'g'ri `/admin/api/product/` manzili orqali ochadi.
+
+Egasiz qolgan mahsulotlar haqidagi ogohlantirish: 27.2-bo'lim.
 
 #### CMD uchun curl misollari
 
@@ -2272,11 +2294,17 @@ curl -X DELETE http://127.0.0.1:8000/api/products/3/ -H "Authorization: Bearer %
 {"detail":"«DELETE» metodi ruxsat etilmagan."}
 ```
 
-**Mahsulotni yashirish va qayta ko'rsatish** (faqat admin roli yoki superuser, `200`):
+**Mahsulotni yashirish va qayta ko'rsatish** (faqat egasi, `200`):
 
 ```cmd
-curl -X POST http://127.0.0.1:8000/api/products/3/hide/ -H "Authorization: Bearer %ADMIN_ACCESS%"
-curl -X POST http://127.0.0.1:8000/api/products/3/unhide/ -H "Authorization: Bearer %ADMIN_ACCESS%"
+curl -X PATCH http://127.0.0.1:8000/api/products/3/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"is_active\":false}"
+curl -X PATCH http://127.0.0.1:8000/api/products/3/ -H "Authorization: Bearer %ACCESS%" -H "Content-Type: application/json" -d "{\"is_active\":true}"
 ```
 
 Yashirilgan mahsulot umumiy ro'yxat va detail'da topilmaydi (`404`), ammo yaratuvchining `users/me/products/` endpointida `"is_active":false` bilan ko'rinadi.
+
+**Boshqaning mahsulotini yashirishga urinish** (`admin` roli yoki superuser ham, `403`):
+
+```json
+{"detail":"Bu mahsulotni faqat uni yaratgan foydalanuvchi o‘zgartira oladi."}
+```
